@@ -1,0 +1,67 @@
+# =====================================================================
+# Zalo AI Challenge 2026 - DataMate (.gitignore)
+# =====================================================================
+
+# 1. Competition Data & Outputs (DO NOT push raw data or large outputs)
+data/*
+!data/.gitkeep
+!data/README.md
+
+result/*
+!result/.gitkeep
+
+# 2. Model Weights & Checkpoints (Rule 2: declare in README, do not push to git)
+models/
+weights/
+checkpoints/
+lora_adapters/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.gguf
+*.onnx
+
+# 3. Temporary & Log files
+tmp/
+logs/
+*.log
+
+# 4. Python / Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.venv/
+venv/
+ENV/
+env/
+
+# 5. Jupyter Notebooks & IDE
+.ipynb_checkpoints/
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# 6. Environment secrets
+.env
+.env.local

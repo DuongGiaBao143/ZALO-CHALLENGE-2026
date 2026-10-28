@@ -1,0 +1,20 @@
+# Core Data Processing (Tabular: CSV, Excel, SQLite)
+pandas>=2.2.0
+numpy>=1.26.0
+openpyxl>=3.1.2
+xlrd>=2.0.1
+duckdb>=1.1.0
+pyyaml>=6.0.1
+tqdm>=4.66.0
+pydantic>=2.7.0
+
+# Testing & Local Development
+pytest>=8.0.0
+
+# LLM Inference & Fine-tuning (Install inside CUDA >= 12.8 Docker / GPU Server)
+# Uncomment or install in GPU environment:
+# torch>=2.6.0
+# transformers>=4.46.0
+# accelerate>=1.0.0
+# vllm>=0.7.2
+# peft>=0.13.0

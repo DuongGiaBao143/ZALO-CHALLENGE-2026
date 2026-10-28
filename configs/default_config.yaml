@@ -1,0 +1,32 @@
+# =====================================================================
+# Zalo AI Challenge 2026 — DataMate Configuration
+# =====================================================================
+
+model:
+  # Rule 2: Total parameters across all inference models <= 15B,
+  # weights publicly released before 2026-10-01.
+  name_or_path: "Qwen/Qwen2.5-Coder-14B-Instruct"
+  backend: "vllm"               # Options: "vllm", "transformers", "dry_run"
+  tensor_parallel_size: 2       # Rule 7: 2 x NVIDIA RTX 5090 (64GB total VRAM)
+  gpu_memory_utilization: 0.90
+  max_model_len: 16384
+  dtype: "bfloat16"
+
+  # Rule 8: Deterministic generation for reproducibility (|PA_uploaded - PA_rerun| <= 0.03)
+  temperature: 0.0
+  top_p: 1.0
+  seed: 42
+  max_tokens: 2048
+
+agent:
+  max_retries: 2                # Self-correction iterations when generated Python code fails
+  sandbox_timeout_sec: 15       # Timeout per code execution inside sandbox
+  abstain_on_error: true        # Return "abstain" (0 pts) instead of guessing (-1 pt) when uncertain
+  max_sample_rows: 5            # Number of sample rows included in schema prompt per table
+  max_unique_categorical: 25    # Max unique values shown for string/categorical columns
+
+paths:
+  data_dir: "/data"
+  output_file: "/result/submission.jsonl"
+  log_file: "/result/run.log"
+  work_dir: "/tmp/datamate_work" # Rule 5: /data is read-only; write temporary files elsewhere
