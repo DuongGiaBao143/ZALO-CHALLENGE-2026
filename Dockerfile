@@ -6,7 +6,7 @@
 #   - Requires CUDA >= 12.8 and matching PyTorch / vLLM build
 #   - Network disabled at runtime (Rule 3: fully offline)
 #   - /data mounted read-only (Rule 5)
-#   - Collects output at /result/submission.jsonl
+#   - Collects output at /result/submission.jsonl and /result/logs/
 # =====================================================================
 
 FROM nvidia/cuda:12.8.0-devel-ubuntu22.04
@@ -40,14 +40,16 @@ COPY requirements.txt /workspace/requirements.txt
 RUN python -m pip install --upgrade pip && \
     python -m pip install -r /workspace/requirements.txt
 
-# Copy source code and configs
+# Copy source code, configs, and predict.sh
 COPY configs/ /workspace/configs/
 COPY src/ /workspace/src/
 COPY scripts/ /workspace/scripts/
+COPY predict.sh /workspace/predict.sh
 COPY README.md /workspace/README.md
 
-# Create writable directories for temporary files and results
-RUN mkdir -p /tmp/datamate_work /result
+# Create writable directories for temporary files, results, and per-question logs
+RUN chmod +x /workspace/predict.sh && \
+    mkdir -p /tmp/datamate_work /result /result/logs
 
-# Default command: run offline inference from /data to /result/submission.jsonl
-CMD ["python", "scripts/run_inference.py", "--config", "configs/default_config.yaml", "--data-dir", "/data", "--output", "/result/submission.jsonl"]
+# Default command: run predict.sh reading from /data and writing to /result/submission.jsonl
+CMD ["/workspace/predict.sh"]

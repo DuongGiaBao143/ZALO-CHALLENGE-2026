@@ -1,20 +1,23 @@
 # Thư mục Dữ liệu (`data/`)
 
-> **Lưu ý:** Toàn bộ dữ liệu thô trong thư mục này đã được đưa vào `.gitignore` để tránh đẩy các file dung lượng lớn lên GitHub.
-
-Mỗi thành viên trong team sau khi tải bộ dữ liệu từ cổng thông tin **Zalo AI Challenge 2026** hãy giải nén vào thư mục `data/` theo cấu trúc:
+Dữ liệu của cuộc thi đã được giải nén sẵn vào hai thư mục `data/train/` và `data/public_test/` để toàn bộ thành viên trong team có thể sử dụng ngay sau khi `git pull` (hai file nén gốc `.zip` đã được chặn trong `.gitignore` vì vượt giới hạn 100 MB/file của GitHub).
 
 ```text
 data/
-├── rulebook.md                # Bộ quy tắc dùng chung
-├── calendar.csv               # Lịch Âm - Dương dùng chung
-├── questions.jsonl            # Danh sách câu hỏi của split hiện tại
-└── businesses/                # (hoặc đặt trực tiếp các thư mục biz_xxx/ tại data/)
-    ├── biz_001/
-    │   ├── README.md
-    │   ├── orders.csv
-    │   ├── products.xlsx
-    │   └── inventory.sqlite
-    └── biz_118/
-        └── ...
+├── train/                           # Tập Training (30 doanh nghiệp, 3.000 câu hỏi + đáp án)
+│   ├── data/
+│   │   ├── biz_101/                 # (*.csv, *.xlsx, *.sqlite + README.md)
+│   │   └── ... (biz_101 -> biz_130)
+│   ├── rulebook.md                  # Bộ quy tắc của tập train
+│   ├── calendar.csv                 # Lịch Dương - Âm (2024 - 2027)
+│   ├── questions.jsonl              # 3.000 câu hỏi
+│   └── answers.jsonl                # 3.000 đáp án chuẩn (kèm trường alias)
+│
+└── public_test/                     # Tập Public Test (14 doanh nghiệp, 1.000 câu hỏi)
+    ├── data/
+    │   ├── dev_001/
+    │   └── ... (dev_001 -> dev_014)
+    ├── rulebook.md                  # Bộ quy tắc của tập public_test (có thêm ngành mới!)
+    ├── calendar.csv                 # Lịch Dương - Âm
+    └── questions.jsonl              # 1.000 câu hỏi kiểm tra công khai
 ```

@@ -1,10 +1,12 @@
-"""Main DataMate Agent with Self-Correction Loop and Abstain Gatekeeper."""
+"""Main DataMate Agent with Self-Correction Loop, Abstain Gatekeeper, and Per-Question Logging."""
 
 from __future__ import annotations
 
+import json
 import logging
+import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.agent.prompts import (
     SYSTEM_PROMPT,
@@ -67,8 +69,9 @@ class DataMateAgent:
 
     def _get_business_profile(self, business_id: str) -> BusinessProfile:
         if business_id not in self._profile_cache:
-            # Support either /data/businesses/<business_id> or /data/<business_id>
+            # Official package structure from data.md: <split>/data/<business_id>/
             candidates = [
+                self.data_dir / "data" / business_id,
                 self.data_dir / "businesses" / business_id,
                 self.data_dir / business_id,
             ]
@@ -84,7 +87,6 @@ class DataMateAgent:
     def _generate_llm_response(self, messages: List[Dict[str, str]]) -> str:
         """Generate response from vLLM (or dry_run fallback for CPU pipeline testing)."""
         if self.backend == "dry_run" or self.llm is None:
-            # Dry-run fallback: safely returns `abstain` so local pipeline tests work without GPU
             return (
                 "```python\n"
                 'print(json.dumps({"type": "abstain", "answer": None}, ensure_ascii=False))\n'
@@ -94,12 +96,27 @@ class DataMateAgent:
         outputs = self.llm.chat(messages=[messages], sampling_params=self.sampling_params)
         return outputs[0].outputs[0].text
 
-    def answer_question(self, item: QuestionItem) -> SubmissionItem:
-        """Solve a single QuestionItem with code execution, self-correction, and abstain gate."""
+    def answer_question_with_trace(
+        self, item: QuestionItem
+    ) -> Tuple[SubmissionItem, Dict[str, Any]]:
+        """Solve a single QuestionItem and return both SubmissionItem and per-question log trace."""
+        t0 = time.time()
+        trace: Dict[str, Any] = {
+            "id": item.id,
+            "business_id": item.business_id,
+            "question": item.question,
+            "as_of_date": item.as_of_date,
+            "attempts": [],
+        }
+
         profile = self._get_business_profile(item.business_id)
         if profile.error:
             logger.warning("Business profile error for %s: %s", item.id, profile.error)
-            return SubmissionItem.abstain(item.id)
+            sub = SubmissionItem.abstain(item.id)
+            trace["final_answer"] = sub.to_dict()
+            trace["elapsed_time_sec"] = round(time.time() - t0, 4)
+            trace["error"] = profile.error
+            return sub, trace
 
         try:
             rel_dates = resolve_relative_dates(item.as_of_date)
@@ -107,6 +124,7 @@ class DataMateAgent:
             logger.warning("Invalid as_of_date for %s (%s): %s", item.id, item.as_of_date, exc)
             rel_dates = {"as_of_date": item.as_of_date}
 
+        calendar_path = self.shared_context.get("calendar_path", "")
         schema_md = format_profile_for_prompt(profile)
         user_prompt = build_user_prompt(
             question=item.question,
@@ -114,7 +132,7 @@ class DataMateAgent:
             relative_dates=rel_dates,
             schema_markdown=schema_md,
             rulebook_text=self.shared_context.get("rulebook_text", ""),
-            calendar_path=self.shared_context.get("calendar_path", ""),
+            calendar_path=calendar_path,
         )
 
         messages: List[Dict[str, str]] = [
@@ -126,6 +144,13 @@ class DataMateAgent:
             llm_reply = self._generate_llm_response(messages)
             code = extract_python_code(llm_reply)
             if not code:
+                trace["attempts"].append(
+                    {
+                        "attempt": attempt + 1,
+                        "generated_code": None,
+                        "error": "No Python code block found in LLM response.",
+                    }
+                )
                 messages.append({"role": "assistant", "content": llm_reply})
                 messages.append(
                     {
@@ -138,8 +163,20 @@ class DataMateAgent:
             sandbox_res = run_python_in_sandbox(
                 code=code,
                 business_dir=profile.business_dir,
+                calendar_path=calendar_path,
                 work_dir=self.work_dir,
                 timeout_sec=self.sandbox_timeout,
+            )
+
+            trace["attempts"].append(
+                {
+                    "attempt": attempt + 1,
+                    "generated_code": code,
+                    "stdout": sandbox_res.stdout,
+                    "stderr": sandbox_res.stderr,
+                    "success": sandbox_res.success,
+                    "error_message": sandbox_res.error_message,
+                }
             )
 
             if sandbox_res.success and sandbox_res.parsed_output is not None:
@@ -148,7 +185,10 @@ class DataMateAgent:
                 clean_type, clean_ans = format_answer_payload(
                     raw_type, raw_ans, fallback_to_abstain=True
                 )
-                return SubmissionItem(id=item.id, type=clean_type, answer=clean_ans)
+                sub = SubmissionItem(id=item.id, type=clean_type, answer=clean_ans)
+                trace["final_answer"] = sub.to_dict()
+                trace["elapsed_time_sec"] = round(time.time() - t0, 4)
+                return sub, trace
 
             logger.info(
                 "Question %s attempt %d/%d failed: %s",
@@ -165,5 +205,11 @@ class DataMateAgent:
                 }
             )
 
-        # Abstain Gate: if all retries fail, return `abstain` (0 pts) instead of risking -1 pt
-        return SubmissionItem.abstain(item.id)
+        sub = SubmissionItem.abstain(item.id)
+        trace["final_answer"] = sub.to_dict()
+        trace["elapsed_time_sec"] = round(time.time() - t0, 4)
+        return sub, trace
+
+    def answer_question(self, item: QuestionItem) -> SubmissionItem:
+        sub, _ = self.answer_question_with_trace(item)
+        return sub
