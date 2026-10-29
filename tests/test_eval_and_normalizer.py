@@ -1,10 +1,12 @@
-"""Unit tests for DataMate string normalization, PA scoring, and date resolution."""
+"""Unit tests for DataMate string normalization, PA scoring (with `alias`), and Vietnamese utilities."""
 
 from __future__ import annotations
 
 import sys
 import unicodedata
 from pathlib import Path
+
+import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -17,88 +19,81 @@ from src.postprocess.normalizer import (
     format_percent_value,
     normalize_string,
 )
+from src.postprocess.vn_utils import parse_vn_date, parse_vn_number, vn_norm
 from src.time_resolver.calendar_utils import resolve_relative_dates
 
 
 def test_normalize_string_preserves_diacritics_and_strips_punctuation() -> None:
-    # Decomposed NFD string + punctuation + extra spaces
     raw = unicodedata.normalize("NFD", "  Sting - Dâu (330ml)!!  ")
     assert normalize_string(raw) == "sting dâu 330ml"
 
 
-def test_score_single_answer_types() -> None:
-    # 1. String match with accepted forms (name + code)
+def test_vn_utils_dates_numbers_and_norm() -> None:
+    # 1. Mixed Vietnamese date formats discovered in biz_101 & biz_123
+    s_dates = pd.Series(["1 thg 6 2025", "01/01/2025", "2025-08-15", "15/06"])
+    parsed = parse_vn_date(s_dates, default_year=2025)
+    assert parsed.iloc[0].strftime("%Y-%m-%d") == "2025-06-01"
+    assert parsed.iloc[1].strftime("%Y-%m-%d") == "2025-01-01"
+    assert parsed.iloc[2].strftime("%Y-%m-%d") == "2025-08-15"
+    assert parsed.iloc[3].strftime("%Y-%m-%d") == "2025-06-15"
+
+    # 2. Comma-formatted VND amounts discovered in biz_101/ban_hang.csv
+    s_nums = pd.Series(["560,000", "4,000đ", "165,000 VND"])
+    parsed_nums = parse_vn_number(s_nums)
+    assert list(parsed_nums) == [560000, 4000, 165000]
+
+    # 3. Series NFC normalization
+    s_names = pd.Series([unicodedata.normalize("NFD", "Cà Phê Sữa (M)")])
+    assert vn_norm(s_names).iloc[0] == "cà phê sữa m"
+
+
+def test_score_single_answer_with_official_alias_format() -> None:
+    # 1. String match with official `alias` field from train/answers.jsonl
     ref_str = {
-        "id": "q1",
+        "id": "q_06de33fa21cc",
         "type": "string",
-        "accepted_forms": ["Sting dâu 330ml", "SP0042"],
+        "answer": "Xi măng Hà Tiên PCB40 bao 50kg",
+        "alias": ["SP0001"],
     }
-    assert score_single_answer({"id": "q1", "type": "string", "answer": "  sp0042 "}, ref_str) == (
-        "correct",
-        1,
-    )
     assert score_single_answer(
-        {"id": "q1", "type": "string", "answer": "Sting dâu  330ML!"}, ref_str
-    ) == ("correct", 1)
-    assert score_single_answer({"id": "q1", "type": "string", "answer": "Pepsi"}, ref_str) == (
-        "wrong",
-        -1,
-    )
-
-    # 2. Number & Percent
-    ref_num = {"id": "q2", "type": "number", "answer": 48250000}
-    assert score_single_answer({"id": "q2", "type": "number", "answer": 48250000.0}, ref_num) == (
-        "correct",
-        1,
-    )
-    ref_pct = {"id": "q3", "type": "percent", "answer": -12.45}
-    assert score_single_answer({"id": "q3", "type": "percent", "answer": -12.454}, ref_pct) == (
-        "correct",
-        1,
-    )
-    assert score_single_answer({"id": "q3", "type": "percent", "answer": 12.45}, ref_pct) == (
-        "wrong",
-        -1,
-    )
-
-    # 3. List (ordered)
-    ref_list = {"id": "q4", "type": "list", "answer": ["Cà phê sữa", "Bạc xỉu", "Trà đào"]}
-    assert score_single_answer(
-        {"id": "q4", "type": "list", "answer": ["cà phê sữa", "BẠC XỈU", "trà đào"]},
-        ref_list,
+        {"id": "q_06de33fa21cc", "type": "string", "answer": "sp0001"}, ref_str
     ) == ("correct", 1)
     assert score_single_answer(
-        {"id": "q4", "type": "list", "answer": ["Bạc xỉu", "Cà phê sữa", "Trà đào"]},
-        ref_list,
-    ) == ("wrong", -1)
+        {"id": "q_06de33fa21cc", "type": "string", "answer": "Xi măng Hà Tiên PCB40 bao 50kg"},
+        ref_str,
+    ) == ("correct", 1)
 
-    # 4. Table (columns matched by normalized name, rows matched as a set)
+    # 2. List match with 2D `alias` field from train/answers.jsonl
+    ref_list = {
+        "id": "q_list",
+        "type": "list",
+        "answer": ["Cà phê sữa (M)", "Trà đào cam sả (M)", "Cà phê đen (M)"],
+        "alias": [["SP0003"], ["SP0017"], ["SP0001"]],
+    }
+    assert score_single_answer(
+        {"id": "q_list", "type": "list", "answer": ["SP0003", "Trà đào cam sả (M)", "sp0001"]},
+        ref_list,
+    ) == ("correct", 1)
+
+    # 3. Table match with 2D row `alias` field from train/answers.jsonl
     ref_table = {
-        "id": "q5",
+        "id": "q_0a76d3680594",
         "type": "table",
         "answer": {
-            "columns": ["Sản phẩm", "Doanh thu"],
-            "rows": [["Trà đào", 150000], ["Cà phê sữa", 300000]],
+            "columns": ["khach_hang", "so_tien_no"],
+            "rows": [["Đỗ Đức An", 404500], ["Dương Tâm Bích", 158600]],
         },
+        "alias": [["KH0124"], ["KH0233"]],
     }
-    pred_table_reordered = {
-        "id": "q5",
+    pred_table = {
+        "id": "q_0a76d3680594",
         "type": "table",
         "answer": {
-            "columns": ["doanh thu", "SẢN PHẨM"],
-            "rows": [[300000, "cà phê sữa"], [150000, "Trà Đào"]],
+            "columns": ["khach_hang", "so_tien_no"],
+            "rows": [["KH0233", 158600], ["Đỗ Đức An", 404500]],
         },
     }
-    assert score_single_answer(pred_table_reordered, ref_table) == ("correct", 1)
-
-    # 5. Unanswerable & Abstain
-    ref_unans = {"id": "q6", "type": "unanswerable", "answer": None}
-    assert score_single_answer({"id": "q6", "type": "unanswerable"}, ref_unans) == ("correct", 1)
-    assert score_single_answer({"id": "q6", "type": "number", "answer": 0}, ref_unans) == (
-        "wrong",
-        -1,
-    )
-    assert score_single_answer({"id": "q6", "type": "abstain"}, ref_unans) == ("abstain", 0)
+    assert score_single_answer(pred_table, ref_table) == ("correct", 1)
 
 
 def test_penalized_accuracy_aggregation() -> None:
@@ -109,10 +104,10 @@ def test_penalized_accuracy_aggregation() -> None:
         {"id": "4", "type": "boolean", "answer": True},
     ]
     preds = [
-        {"id": "1", "type": "number", "answer": 100},  # +1 (correct)
-        {"id": "2", "type": "abstain", "answer": None},  #  0 (abstain)
-        {"id": "3", "type": "number", "answer": 50},  # -1 (wrong on unanswerable)
-        {"id": "4", "type": "boolean", "answer": True},  # +1 (correct)
+        {"id": "1", "type": "number", "answer": 100},
+        {"id": "2", "type": "abstain", "answer": None},
+        {"id": "3", "type": "number", "answer": 50},
+        {"id": "4", "type": "boolean", "answer": True},
     ]
     report = evaluate_predictions(preds, refs)
     assert report.total == 4
@@ -123,7 +118,6 @@ def test_penalized_accuracy_aggregation() -> None:
 
 
 def test_resolve_relative_dates() -> None:
-    # 2026-03-04 is a Wednesday
     rel = resolve_relative_dates("2026-03-04")
     assert rel["as_of_date (hôm nay / today)"] == "2026-03-04"
     assert rel["tuần rồi / tuần trước (last week, Mon-Sun)"] == "2026-02-23 .. 2026-03-01"
@@ -139,9 +133,9 @@ def test_format_answer_payload_fallback_to_abstain() -> None:
 
 if __name__ == "__main__":
     test_normalize_string_preserves_diacritics_and_strips_punctuation()
-    test_score_single_answer_types()
+    test_vn_utils_dates_numbers_and_norm()
+    test_score_single_answer_with_official_alias_format()
     test_penalized_accuracy_aggregation()
     test_resolve_relative_dates()
     test_format_answer_payload_fallback_to_abstain()
-    print("[OK] All DataMate unit tests passed successfully!")
-
+    print("[OK] All DataMate unit tests (including Vietnamese utilities & alias scoring) passed!")

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Main inference entrypoint for Zalo AI Challenge 2026 — DataMate.
 
-Reads `/data/questions.jsonl`, runs DataMateAgent, and streams each prediction line-by-line
-to `/result/submission.jsonl` (flushing immediately to comply with Rule 8 partial scoring
-in case of early termination).
+Reads `/data/questions.jsonl`, runs DataMateAgent, streams each prediction line-by-line
+to `/result/submission.jsonl` (flushing immediately), and writes per-question logs to
+`/result/logs/<question_id>.json` as required by the Data & Submission Format specification.
 """
 
 from __future__ import annotations
@@ -18,13 +18,12 @@ from pathlib import Path
 import yaml
 from tqdm import tqdm
 
-# Ensure project root is on sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.agent.solver import DataMateAgent
-from src.schemas import QuestionItem
+from src.schemas import QuestionItem, SubmissionItem
 
 
 def setup_logging(log_file: str | None) -> None:
@@ -53,7 +52,7 @@ def parse_args() -> argparse.Namespace:
         "--data-dir",
         type=str,
         default=None,
-        help="Override data directory (default: from config, typically /data).",
+        help="Override data directory (default: /data, or data/train, data/public_test).",
     )
     parser.add_argument(
         "--questions-file",
@@ -66,6 +65,18 @@ def parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         help="Override output submission.jsonl path (default: /result/submission.jsonl).",
+    )
+    parser.add_argument(
+        "--logs-dir",
+        type=str,
+        default=None,
+        help="Directory for per-question logs (default: <output_dir>/logs).",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Optional limit on number of questions to run (for quick local testing).",
     )
     parser.add_argument(
         "--dry-run",
@@ -87,6 +98,7 @@ def main() -> None:
     paths_cfg = config.get("paths", {})
     data_dir = Path(args.data_dir or paths_cfg.get("data_dir", "/data"))
     output_path = Path(args.output or paths_cfg.get("output_file", "/result/submission.jsonl"))
+    logs_dir = Path(args.logs_dir) if args.logs_dir else (output_path.parent / "logs")
     log_file = paths_cfg.get("log_file", str(output_path.parent / "run.log"))
 
     setup_logging(log_file)
@@ -102,8 +114,8 @@ def main() -> None:
         sys.exit(1)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load all questions
     questions: list[QuestionItem] = []
     with questions_path.open("r", encoding="utf-8") as qf:
         for line_no, line in enumerate(qf, start=1):
@@ -116,37 +128,58 @@ def main() -> None:
                 logger.error("Invalid JSON on line %d of %s: %s", line_no, questions_path, exc)
                 raise
 
+    if args.limit is not None and args.limit > 0:
+        questions = questions[: args.limit]
+
     logger.info("Loaded %d questions from %s", len(questions), questions_path)
     start_time = time.time()
 
     agent = DataMateAgent(config=config, data_dir=data_dir)
 
-    # Stream answers line-by-line and flush immediately (Rule 8 safeguard)
     with output_path.open("w", encoding="utf-8") as out_f:
         for q_item in tqdm(questions, desc="Solving questions"):
             q_t0 = time.time()
             try:
-                sub_item = agent.answer_question(q_item)
+                sub_item, trace = agent.answer_question_with_trace(q_item)
             except Exception as exc:
-                logger.exception("Unhandled error on question %s, falling back to abstain: %s", q_item.id, exc)
+                logger.exception(
+                    "Unhandled error on question %s, falling back to abstain: %s",
+                    q_item.id,
+                    exc,
+                )
                 sub_item = SubmissionItem.abstain(q_item.id)
+                trace = {
+                    "id": q_item.id,
+                    "business_id": q_item.business_id,
+                    "question": q_item.question,
+                    "final_answer": sub_item.to_dict(),
+                    "elapsed_time_sec": round(time.time() - q_t0, 4),
+                    "error": str(exc),
+                }
 
             out_f.write(json.dumps(sub_item.to_dict(), ensure_ascii=False) + "\n")
             out_f.flush()
+
+            # Write per-question log to /result/logs/<id>.json (Rule 8 & data.md requirement)
+            q_log_file = logs_dir / f"{q_item.id}.json"
+            with q_log_file.open("w", encoding="utf-8") as lf:
+                json.dump(trace, lf, ensure_ascii=False, indent=2)
+
             logger.info(
                 "Question %s (%s) -> type=%s in %.2fs",
                 q_item.id,
                 q_item.business_id,
                 sub_item.type,
-                time.time() - q_t0,
+                trace.get("elapsed_time_sec", time.time() - q_t0),
             )
 
     elapsed = time.time() - start_time
     logger.info(
-        "Completed %d questions in %.2fs. Output saved to %s",
+        "Completed %d questions in %.2fs. Output saved to %s (per-question logs in %s)",
         len(questions),
         elapsed,
         output_path,
+        logs_dir,
     )
 
 

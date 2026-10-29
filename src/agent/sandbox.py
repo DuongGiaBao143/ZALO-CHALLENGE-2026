@@ -1,4 +1,9 @@
-"""Sandbox code execution utility for running generated Python code safely."""
+"""Sandbox code execution utility for running generated Python code safely.
+
+Pre-imports `vn_norm`, `parse_vn_number`, and `parse_vn_date` so generated code can
+reliably handle Vietnamese dates (`"1 thg 6 2025"`), comma-formatted numbers (`"560,000"`),
+and Unicode NFC string matching.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +18,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 _CODE_BLOCK_RE = re.compile(r"```(?:python|py)?\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
+PROJECT_ROOT = str(Path(__file__).resolve().parent.parent.parent)
 
 
 @dataclass
@@ -37,10 +43,11 @@ def extract_python_code(llm_response: str) -> Optional[str]:
 def run_python_in_sandbox(
     code: str,
     business_dir: str,
+    calendar_path: str = "",
     work_dir: str = "/tmp/datamate_work",
     timeout_sec: int = 15,
 ) -> SandboxResult:
-    """Execute Python code in a subprocess with `BUSINESS_DIR` environment variable."""
+    """Execute Python code in a subprocess with `BUSINESS_DIR` and Vietnamese helpers."""
     work_path = Path(work_dir)
     work_path.mkdir(parents=True, exist_ok=True)
 
@@ -53,16 +60,20 @@ def run_python_in_sandbox(
     ) as tmp_file:
         script_path = tmp_file.name
         header = (
-            "import os, json, math, sqlite3, warnings\n"
+            "import os, sys, json, math, sqlite3, unicodedata, warnings\n"
+            f"sys.path.insert(0, {PROJECT_ROOT!r})\n"
             "import pandas as pd\n"
             "import numpy as np\n"
+            "from src.postprocess.vn_utils import vn_norm, parse_vn_number, parse_vn_date\n"
             "warnings.filterwarnings('ignore')\n"
-            f"BUSINESS_DIR = {os.path.abspath(business_dir)!r}\n\n"
+            f"BUSINESS_DIR = {os.path.abspath(business_dir)!r}\n"
+            f"CALENDAR_PATH = {calendar_path!r}\n\n"
         )
         tmp_file.write(header + code + "\n")
 
     env = os.environ.copy()
     env["BUSINESS_DIR"] = os.path.abspath(business_dir)
+    env["CALENDAR_PATH"] = calendar_path
     env["PYTHONIOENCODING"] = "utf-8"
 
     try:
@@ -103,7 +114,6 @@ def run_python_in_sandbox(
             error_message=stderr or f"Process exited with non-zero code {proc.returncode}",
         )
 
-    # Parse the last non-empty JSON line from stdout
     lines = [line.strip() for line in stdout.splitlines() if line.strip()]
     if not lines:
         return SandboxResult(

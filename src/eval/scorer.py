@@ -1,10 +1,12 @@
-"""Official Penalized Accuracy (PA) scorer matching `evaluation.md`.
+"""Official Penalized Accuracy (PA) scorer matching `evaluation.md` and `data.md`.
 
 Scoring rules:
   - `abstain` (or missing answer) -> 0 points
   - `correct` -> +1 point
   - `wrong` -> -1 point
   PA = (1 / N) * sum(s_i)
+
+Supports the `alias` field in `answers.jsonl` across `string`, `list`, and `table` types.
 """
 
 from __future__ import annotations
@@ -48,7 +50,7 @@ def _match_string(pred: Any, ref: Union[str, Sequence[str]]) -> bool:
         return False
 
     if isinstance(ref, (list, tuple, set)):
-        accepted_forms = {normalize_string(x) for x in ref}
+        accepted_forms = {normalize_string(x) for x in ref if x is not None}
     else:
         accepted_forms = {normalize_string(ref)}
 
@@ -62,31 +64,36 @@ def _match_cell(pred_cell: Any, ref_cell: Any) -> bool:
     return _match_string(pred_cell, ref_cell)
 
 
-def _match_list(pred: Any, ref: Any) -> bool:
+def _match_list(pred: Any, ref: Any, aliases: Optional[List[Any]] = None) -> bool:
     """Always ordered, matched position by position with string or number rule."""
     if not isinstance(pred, list) or not isinstance(ref, list):
         return False
     if len(pred) != len(ref):
         return False
-    return all(_match_cell(p_item, r_item) for p_item, r_item in zip(pred, ref))
+
+    for idx, (p_item, r_item) in enumerate(zip(pred, ref)):
+        if (
+            aliases
+            and isinstance(aliases, list)
+            and idx < len(aliases)
+            and aliases[idx]
+            and not isinstance(r_item, (int, float))
+        ):
+            extra = aliases[idx] if isinstance(aliases[idx], list) else [aliases[idx]]
+            accepted = [r_item] + list(extra)
+            if not _match_cell(p_item, accepted):
+                return False
+        else:
+            if not _match_cell(p_item, r_item):
+                return False
+    return True
 
 
-def _canonical_cell(cell: Any, is_numeric_col: bool) -> Any:
-    if is_numeric_col:
-        try:
-            return round(float(format_number_value(cell)), 2)
-        except Exception:
-            return ("__invalid_num__", str(cell))
-    if isinstance(cell, (list, tuple, set)):
-        # If reference cell has multiple accepted forms, pick sorted tuple of normalized forms
-        return tuple(sorted(normalize_string(x) for x in cell))
-    return normalize_string(cell)
-
-
-def _match_table(pred: Any, ref: Any) -> bool:
-    """Match table according to evaluation.md:
+def _match_table(pred: Any, ref: Any, aliases: Optional[List[Any]] = None) -> bool:
+    """Match table according to evaluation.md & rulebook.md:
     - Columns are matched by normalized name; if names do not match, by position.
-    - Rows are matched as a set; name cells with string rule, numeric cells with number rule.
+    - Rows are matched as a set; name cells with string rule (including row alias on first column),
+      numeric cells with number rule.
     """
     if not isinstance(pred, dict) or not isinstance(ref, dict):
         return False
@@ -118,11 +125,27 @@ def _match_table(pred: Any, ref: Any) -> bool:
             return False
         reordered_pred_rows.append([row[idx] for idx in col_map])
 
-    # Match rows as a set (bipartite / multiset matching)
-    used_pred = [False] * len(reordered_pred_rows)
-    for r_row in ref_rows:
+    # Build enriched reference rows incorporating `alias` on column 0 (entity name/code)
+    enriched_ref_rows: List[List[Any]] = []
+    for r_idx, r_row in enumerate(ref_rows):
         if not isinstance(r_row, (list, tuple)) or len(r_row) != len(ref_cols):
             return False
+        row_copy = list(r_row)
+        if (
+            aliases
+            and isinstance(aliases, list)
+            and r_idx < len(aliases)
+            and aliases[r_idx]
+            and len(row_copy) > 0
+            and not isinstance(row_copy[0], (int, float))
+        ):
+            extra = aliases[r_idx] if isinstance(aliases[r_idx], list) else [aliases[r_idx]]
+            row_copy[0] = [row_copy[0]] + list(extra)
+        enriched_ref_rows.append(row_copy)
+
+    # Match rows as a set
+    used_pred = [False] * len(reordered_pred_rows)
+    for r_row in enriched_ref_rows:
         matched_idx = None
         for p_idx, p_row in enumerate(reordered_pred_rows):
             if used_pred[p_idx]:
@@ -141,7 +164,7 @@ def score_single_answer(
     pred_item: Optional[Dict[str, Any]],
     ref_item: Dict[str, Any],
 ) -> Tuple[str, int]:
-    """Score a single prediction against a reference item.
+    """Score a single prediction against a reference item (`answers.jsonl` format).
 
     Returns:
         (verdict, score) where verdict in {"correct", "abstain", "wrong"}
@@ -159,8 +182,8 @@ def score_single_answer(
         return "wrong", -1
 
     pred_ans = pred_item.get("answer")
-    # Support optional `accepted_forms` field in reference item for strings
-    ref_ans = ref_item.get("accepted_forms", ref_item.get("answer"))
+    ref_ans = ref_item.get("answer")
+    aliases = ref_item.get("alias") or []
 
     if ref_type == AnswerType.UNANSWERABLE.value:
         return "correct", 1
@@ -170,15 +193,19 @@ def score_single_answer(
     elif ref_type == AnswerType.PERCENT.value:
         is_ok = _match_percent(pred_ans, ref_ans)
     elif ref_type == AnswerType.STRING.value:
-        is_ok = _match_string(pred_ans, ref_ans)
+        if "accepted_forms" in ref_item:
+            accepted = ref_item["accepted_forms"]
+        else:
+            accepted = [ref_ans] + (list(aliases) if isinstance(aliases, list) else [aliases])
+        is_ok = _match_string(pred_ans, accepted)
     elif ref_type == AnswerType.DATE.value:
         is_ok = str(pred_ans).strip() == str(ref_ans).strip()
     elif ref_type == AnswerType.BOOLEAN.value:
         is_ok = isinstance(pred_ans, bool) and (pred_ans == bool(ref_ans))
     elif ref_type == AnswerType.LIST.value:
-        is_ok = _match_list(pred_ans, ref_ans)
+        is_ok = _match_list(pred_ans, ref_ans, aliases=aliases)
     elif ref_type == AnswerType.TABLE.value:
-        is_ok = _match_table(pred_ans, ref_ans)
+        is_ok = _match_table(pred_ans, ref_ans, aliases=aliases)
     else:
         is_ok = False
 

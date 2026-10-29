@@ -6,18 +6,19 @@ Repository chính thức của đội thi cho bài toán **DataMate: Natural-Lan
 
 ## 📚 Tài liệu cuộc thi (Đã dịch sang tiếng Việt)
 
-Tất cả thành viên trong team **bắt buộc đọc kỹ 4 file tài liệu dưới đây** trước khi code:
-1. 📄 [Mô tả bài toán (`description.md`)](./description.md): Tổng quan bài toán, định dạng Input/Output.
-2. 📊 [Cách thức chấm điểm (`evaluation.md`)](./evaluation.md): Công thức **Penalized Accuracy ($\text{PA}$)** ($+1 / 0 / -1$), quy tắc chuẩn hóa `string` (`Unicode NFC`), quy tắc `list`/`table`/`ranking`.
-3. ⚖️ [Thể lệ & Yêu cầu kỹ thuật (`rule.md`)](./rule.md): Giới hạn tổng tham số $\le 15\text{B}$, chạy hoàn toàn offline trong Docker trên `2 × NVIDIA RTX 5090 (64GB VRAM)`, `CUDA ≥ 12.8`, điều kiện tái lập kết quả $|\text{PA}_{\text{uploaded}} - \text{PA}_{\text{re-run}}| \le 0.03$.
-4. 🚀 [Hướng dẫn & Lịch trình nộp bài (`submission_guidance.md`)](./submission_guidance.md): Các mốc thời gian Vòng Public Test (`26/10 – 16/11`) và Vòng Private Test (`20/11 – 23/11`).
+Tất cả thành viên trong team **bắt buộc đọc kỹ 5 file tài liệu dưới đây** trước khi code:
+1. 📄 [Mô tả bài toán (`description.md`)](./docs/description.md): Tổng quan bài toán, định dạng Input/Output.
+2. 🗂️ [Mô tả Dữ liệu & Định dạng Nộp bài (`data.md`)](./docs/data.md): Cấu trúc gói dữ liệu `train` (30 shop, 3.000 câu) và `public_test` (14 shop, 1.000 câu), quy tắc `rulebook.md`, `predict.sh` và `/result/logs/`.
+3. 📊 [Cách thức chấm điểm (`evaluation.md`)](./docs/evaluation.md): Công thức **Penalized Accuracy ($\text{PA}$)** ($+1 / 0 / -1$), quy tắc chuẩn hóa `string` (`Unicode NFC`), quy tắc `list`/`table`/`ranking`.
+4. ⚖️ [Thể lệ & Yêu cầu kỹ thuật (`rule.md`)](./docs/rule.md): Giới hạn tổng tham số $\le 15\text{B}$, chạy hoàn toàn offline trong Docker trên `2 × NVIDIA RTX 5090 (64GB VRAM)`, `CUDA ≥ 12.8`, điều kiện tái lập kết quả $|\text{PA}_{\text{uploaded}} - \text{PA}_{\text{re-run}}| \le 0.03$.
+5. 🚀 [Hướng dẫn & Lịch trình nộp bài (`submission_guidance.md`)](./docs/submission_guidance.md): Các mốc thời gian Vòng Public Test (`26/10 – 16/11`) và Vòng Private Test (`20/11 – 23/11`).
 
 ---
 
 ## 🏗️ Kiến trúc hệ thống (System Architecture)
 
 ```text
-questions.jsonl + /data/<business_id> (.csv, .xlsx, .sqlite, README.md)
+<split>/questions.jsonl + <split>/data/<business_id> (.csv, .xlsx, .sqlite, README.md)
        │
        ▼
 ┌───────────────────────────────────────────────────────────────────┐
@@ -30,14 +31,15 @@ questions.jsonl + /data/<business_id> (.csv, .xlsx, .sqlite, README.md)
 ┌───────────────────────────────────────────────────────────────────┐
 │ 2. Time & Rulebook Resolver (`src/time_resolver/calendar_utils.py`)│
 │    Quy đổi sẵn `as_of_date` ("tuần rồi", "tháng này", "năm ngoái")│
-│    bằng Python + nạp `rulebook` và lịch Âm - Dương dùng chung      │
+│    bằng Python + nạp động `rulebook.md` và `calendar.csv`         │
 └───────────────────────────────────────────────────────────────────┘
        │
        ▼
 ┌───────────────────────────────────────────────────────────────────┐
 │ 3. Code-Execution Agent (`src/agent/solver.py` + `sandbox.py`)    │
 │    LLM (<= 15B tham số, chạy qua vLLM) sinh code Python/Pandas/SQL│
-│    chạy trong Sandbox chỉ đọc (`/data`), tự sửa lỗi nếu crash     │
+│    kèm bộ hàm Tiếng Việt (`parse_vn_date`, `parse_vn_number`,     │
+│    `vn_norm`), tự sửa lỗi nếu crash và ghi log `/result/logs/`    │
 └───────────────────────────────────────────────────────────────────┘
        │
        ▼
@@ -48,7 +50,7 @@ questions.jsonl + /data/<business_id> (.csv, .xlsx, .sqlite, README.md)
 └───────────────────────────────────────────────────────────────────┘
        │
        ▼
-/result/submission.jsonl
+/result/submission.jsonl + /result/logs/<question_id>.json
 ```
 
 ---
@@ -59,9 +61,11 @@ questions.jsonl + /data/<business_id> (.csv, .xlsx, .sqlite, README.md)
 .
 ├── configs/
 │   └── default_config.yaml         # Cấu hình model (<=15B), vLLM, seed cố định, đường dẫn
-├── data/                           # (Ignored bởi Git) Đặt dữ liệu cuộc thi tại đây
-│   └── README.md                   # Hướng dẫn đặt dữ liệu cho các thành viên
-├── result/                         # Thư mục xuất file submission.jsonl và run.log
+├── data/                           # Chứa dữ liệu đã giải nén cho cả team dùng chung
+│   ├── train/                      # 30 doanh nghiệp (biz_101..130), 3.000 câu hỏi + đáp án
+│   ├── public_test/                # 14 doanh nghiệp (dev_001..014), 1.000 câu hỏi
+│   └── README.md                   # Mô tả cấu trúc thư mục data
+├── result/                         # Thư mục xuất file submission.jsonl và logs/
 ├── scripts/
 │   ├── run_inference.py            # Script chính chạy từ /data -> /result/submission.jsonl
 │   ├── evaluate_local.py           # Script chấm điểm Penalized Accuracy (PA) nội bộ
@@ -71,16 +75,19 @@ questions.jsonl + /data/<business_id> (.csv, .xlsx, .sqlite, README.md)
 │   ├── profiler/                   # Module 1: Đọc và trích xuất schema (.csv, .xlsx, .sqlite)
 │   ├── time_resolver/              # Module 2: Xử lý thời gian tương đối & lịch Âm-Dương
 │   ├── agent/                      # Module 3: Prompting, vLLM inference & Sandbox chạy code
-│   ├── postprocess/                # Module 4: Chuẩn hóa câu trả lời & Abstain Gate
-│   └── eval/                       # Bộ chấm điểm PA khớp 100% với evaluation.md
+│   ├── postprocess/                # Module 4: Chuẩn hóa câu trả lời, xử lý Tiếng Việt (`vn_utils.py`)
+│   └── eval/                       # Bộ chấm điểm PA khớp 100% với evaluation.md & answers.jsonl
 ├── tests/
-│   └── test_eval_and_normalizer.py # Unit tests kiểm tra bộ chấm điểm và chuẩn hóa
+│   └── test_eval_and_normalizer.py # Unit tests kiểm tra bộ chấm điểm, chuẩn hóa và xử lý Tiếng Việt
+├── predict.sh                      # Entrypoint chuẩn theo yêu cầu Docker của BTC
 ├── Dockerfile                      # Đóng gói chuẩn CUDA 12.8 cho 2x RTX 5090 (offline)
 ├── requirements.txt                # Các thư viện Python cần thiết
-├── description.md
-├── evaluation.md
-├── rule.md
-└── submission_guidance.md
+└── docs/                           # Tài liệu chi tiết cuộc thi
+    ├── description.md              # Mô tả bài toán & format I/O
+    ├── data.md                     # Mô tả dữ liệu & định dạng nộp bài
+    ├── evaluation.md               # Quy cách tính điểm Penalized Accuracy & chuẩn hóa
+    ├── rule.md                     # Thể lệ, ràng buộc phần cứng & Docker offline
+    └── submission_guidance.md      # Lịch trình & quy định nộp bài
 ```
 
 ---
@@ -99,28 +106,29 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 2. Chạy Unit Tests kiểm tra hệ thống chấm điểm & chuẩn hóa
+### 2. Chạy Unit Tests kiểm tra hệ thống chấm điểm, chuẩn hóa & Tiếng Việt
 
 ```bash
-pytest -v
+python tests/test_eval_and_normalizer.py
 ```
 
-### 3. Chạy thử nghiệm Pipeline (Dry-run không cần GPU)
+### 3. Chạy thử nghiệm Pipeline trên tập `train` hoặc `public_test` (Dry-run không cần GPU)
 
 ```bash
 python scripts/run_inference.py \
   --config configs/default_config.yaml \
-  --data-dir data \
-  --output result/submission.jsonl \
+  --data-dir data/train \
+  --output result/train_sub.jsonl \
+  --limit 10 \
   --dry-run
 ```
 
-### 4. Chấm điểm cục bộ trên tập Train / Validation (`Penalized Accuracy`)
+### 4. Chấm điểm cục bộ trên tập Train (`Penalized Accuracy`)
 
 ```bash
 python scripts/evaluate_local.py \
-  --pred result/submission.jsonl \
-  --gold data/train_answers.jsonl
+  --pred result/train_sub.jsonl \
+  --gold data/train/answers.jsonl
 ```
 
 ### 5. Kiểm tra file `submission.jsonl` trước khi nộp lên cổng Zalo AI
@@ -128,7 +136,7 @@ python scripts/evaluate_local.py \
 ```bash
 python scripts/verify_submission.py \
   --submission result/submission.jsonl \
-  --questions data/questions.jsonl
+  --questions data/public_test/questions.jsonl
 ```
 
 ---
@@ -142,9 +150,9 @@ docker build -t datamate-solution:latest .
 # 2. Chạy kiểm thử giống hệt môi trường chấm của Ban Tổ chức:
 #    - Vô hiệu hóa mạng (--network none)
 #    - Mount /data ở chế độ chỉ đọc (:ro)
-#    - Thu thập kết quả tại /result/submission.jsonl
+#    - Thu thập kết quả tại /result/submission.jsonl và /result/logs/
 docker run --rm --gpus all --network none \
-  -v $(pwd)/data:/data:ro \
+  -v $(pwd)/data/public_test:/data:ro \
   -v $(pwd)/result:/result \
   datamate-solution:latest
 ```
