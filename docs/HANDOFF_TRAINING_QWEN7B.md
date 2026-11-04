@@ -100,11 +100,11 @@ Toàn bộ notebook gồm 25 cells (12 phần đánh số). Hãy chạy tuần t
   - Kiểm tra trên web HF thấy commit thành công mới yên tâm.
 
 ### Chặng 3: Đánh giá Pilot & Đóng gói (Cells 19 đến 24)
-- **Cell 20 (Cài runtime vLLM trong `/tmp`):**
-  - Tạo venv riêng tại `/tmp/datamate_vllm_eval_env` để cài `vllm==0.10.2`.
-  - Không cài chung vào môi trường gốc để bảo vệ tính toàn vẹn thư viện và không chiếm 20GB disk output của Kaggle.
-- **Cell 22 (Chấm 30 câu Pilot bằng vLLM):**
-  - Chạy suy luận với `tensor-parallel-size=2` trên 30 câu hỏi mẫu.
+- **Cell 20 (Cài runtime vLLM & Đăng ký cuSPARSELt):**
+  - Tạo venv riêng tại `/tmp/datamate_vllm_eval_env` để cài `vllm==0.10.2` độc lập.
+  - Tự động cài đặt `nvidia-cusparselt-cu12` và đăng ký `libcusparseLt.so.0` vào `/usr/lib` qua `ldconfig` (đã được fix sẵn trong notebook, tránh lỗi thiếu shared library khi vLLM import).
+- **Cell 22 (Chấm 30 câu Pilot bằng vLLM trên 2×T4):**
+  - Chạy suy luận với `tensor-parallel-size=2`, `enforce-eager`, `--max-model-len 8192` và tắt `--no-prefix-caching` (đã tối ưu sẵn cho giới hạn cứng 64KB Shared Memory của chip Turing T4).
   - Xem kết quả in ra dạng JSON:
     ```json
     {

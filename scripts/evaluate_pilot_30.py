@@ -97,6 +97,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--enforce-eager', action='store_true')
     parser.add_argument('--max-model-len', type=int, default=16384)
     parser.add_argument('--max-tokens', type=int, default=4096)
+    parser.add_argument('--no-prefix-caching', action='store_true', help='Disable prefix caching in vLLM')
     args = parser.parse_args()
     if args.tensor_parallel_size < 1 or not 0 < args.gpu_memory_utilization <= 1:
         parser.error('Tensor parallel size must be positive and GPU memory utilization must be in (0, 1]')
@@ -170,14 +171,19 @@ def main() -> None:
         elif args.backend == 'vllm':
             if torch.cuda.device_count() < args.tensor_parallel_size:
                 raise RuntimeError('Not enough GPUs for the requested tensor parallel size')
-            if vram_gb < 16.0:
-                print(f"⚡ VRAM < 16GB (Single T4) -> Tự động bật enforce_eager và tối ưu KV cache để chạy vừa vặn!")
+            is_turing_or_older = torch.cuda.get_device_capability(0) < (8, 0)
+            if vram_gb < 16.0 or is_turing_or_older:
+                print(f"⚡ VRAM < 16GB / Turing GPU (T4) -> Tự động bật enforce_eager và tắt prefix_caching để tránh lỗi 64KB Shared Memory!")
                 args.enforce_eager = True
+                args.no_prefix_caching = True
+                if args.max_model_len > 8192:
+                    args.max_model_len = 8192
                 # FP16 7B weights alone are ~14.2 GiB: they cannot fit one T4 without TP=2.
                 if args.tensor_parallel_size == 1 and not use_4bit:
                     print("⚡ 7B FP16 (~14.2 GiB) không vừa 1 T4 -> vLLM bitsandbytes 4-bit + LoRA")
                     use_4bit = True
-            print(f'vLLM: {args.dtype}, TP={args.tensor_parallel_size}, prefix caching enabled')
+            prefix_caching_enabled = not args.no_prefix_caching
+            print(f'vLLM: {args.dtype}, TP={args.tensor_parallel_size}, prefix caching: {prefix_caching_enabled}')
         elif vram_gb >= 16.0:
             print(f"🚀 VRAM lớn ({vram_gb:.1f}GB) -> Chạy native {args.dtype} đầy đủ tốc độ!")
     print("============================================================\n")
@@ -190,7 +196,7 @@ def main() -> None:
             "tensor_parallel_size": args.tensor_parallel_size,
             "gpu_memory_utilization": args.gpu_memory_utilization,
             "enforce_eager": args.enforce_eager,
-            "enable_prefix_caching": True,
+            "enable_prefix_caching": prefix_caching_enabled if "prefix_caching_enabled" in locals() else True,
             "max_num_seqs": 1,
             "adapter_path": str(adapter_path) if adapter_path else None,
             "dtype": args.dtype,
