@@ -1,0 +1,7 @@
+# GPU Inference Dependencies for CUDA >= 12.8 (RTX 5090 / Blackwell)
+# Note: In offline evaluation, wheels or pre-installed environments must be used.
+torch>=2.6.0
+transformers>=4.46.0
+accelerate>=1.0.0
+vllm>=0.7.2
+peft>=0.13.0

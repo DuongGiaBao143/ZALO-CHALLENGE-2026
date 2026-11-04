@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 import re
 import unicodedata
+from datetime import datetime
 from typing import Any, Tuple
 
 from src.schemas import AnswerType, VALID_ANSWER_TYPES
@@ -40,9 +41,6 @@ def normalize_string(text: Any) -> str:
     # (2) lowercase
     s = s.lower()
     # (3) every character that is not a letter, a digit or whitespace -> space
-    # Note: In Python, str.isalpha() is True for letters (including accented Vietnamese letters)
-    # and str.isdigit() / str.isdecimal() checks digits. To strictly match standard digits (0-9)
-    # and Unicode letters:
     chars = []
     for ch in s:
         if ch.isalpha() or ch.isdigit() or ch.isspace():
@@ -59,6 +57,8 @@ def format_number_value(value: Any) -> int | float:
     """Format numeric value: integer if whole number, else rounded to 2 decimals."""
     if isinstance(value, bool):
         raise ValueError("Boolean is not a valid numeric value.")
+    if isinstance(value, (dict, list)):
+        raise ValueError(f"Collection type {type(value).__name__} is not a valid numeric value.")
     if isinstance(value, str):
         cleaned = value.strip().replace(",", "")
         num = float(cleaned)
@@ -78,6 +78,8 @@ def format_percent_value(value: Any) -> float | int:
     """Format percentage value: rounded to 2 decimal places, preserving sign."""
     if isinstance(value, bool):
         raise ValueError("Boolean is not a valid percent value.")
+    if isinstance(value, (dict, list)):
+        raise ValueError(f"Collection type {type(value).__name__} is not a valid percent value.")
     if isinstance(value, str):
         cleaned = value.strip().rstrip("%").strip().replace(",", "")
         num = float(cleaned)
@@ -94,12 +96,31 @@ def format_percent_value(value: Any) -> float | int:
 
 
 def format_date_value(value: Any) -> str:
-    """Validate and format ISO date (`yyyy-mm-dd`) or ISO month (`yyyy-mm`)."""
+    """Validate and format ISO date (`yyyy-mm-dd`) or ISO month (`yyyy-mm`) with calendar semantics."""
     if value is None:
         raise ValueError("Date cannot be None.")
     s = str(value).strip()
-    if _ISO_DATE_RE.match(s) or _ISO_MONTH_RE.match(s):
-        return s
+
+    # Day format YYYY-MM-DD
+    if _ISO_DATE_RE.match(s):
+        try:
+            parsed = datetime.strptime(s, "%Y-%m-%d")
+            if parsed.strftime("%Y-%m-%d") != s:
+                raise ValueError
+            return s
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"Invalid calendar date: {s!r}") from exc
+
+    # Month format YYYY-MM
+    if _ISO_MONTH_RE.match(s):
+        try:
+            parsed = datetime.strptime(s, "%Y-%m")
+            if parsed.strftime("%Y-%m") != s:
+                raise ValueError
+            return s
+        except (ValueError, TypeError) as exc:
+            raise ValueError(f"Invalid calendar month: {s!r}") from exc
+
     raise ValueError(f"Invalid ISO date/month format: {s!r}")
 
 
@@ -133,8 +154,8 @@ def format_answer_payload(
             return AnswerType.PERCENT.value, format_percent_value(raw_answer)
 
         if ans_type == AnswerType.STRING.value:
-            if raw_answer is None or str(raw_answer).strip() == "":
-                raise ValueError("Empty string answer.")
+            if raw_answer is None or not isinstance(raw_answer, str) or str(raw_answer).strip() == "":
+                raise ValueError(f"Invalid string answer: {raw_answer!r}")
             return AnswerType.STRING.value, unicodedata.normalize("NFC", str(raw_answer).strip())
 
         if ans_type == AnswerType.DATE.value:
@@ -156,6 +177,8 @@ def format_answer_payload(
                 raise ValueError("List answer must be a JSON array.")
             cleaned_list = []
             for item in raw_answer:
+                if isinstance(item, (dict, list)):
+                    raise ValueError(f"List items cannot be nested {type(item).__name__}.")
                 if isinstance(item, (int, float)) and not isinstance(item, bool):
                     cleaned_list.append(format_number_value(item))
                 elif isinstance(item, str):
@@ -171,13 +194,20 @@ def format_answer_payload(
             rows = raw_answer.get("rows")
             if not isinstance(cols, list) or not isinstance(rows, list):
                 raise ValueError("Table 'columns' and 'rows' must be lists.")
+            num_cols = len(cols)
             cleaned_cols = [unicodedata.normalize("NFC", str(c).strip()) for c in cols]
             cleaned_rows = []
-            for r in rows:
+            for r_idx, r in enumerate(rows):
                 if not isinstance(r, (list, tuple)):
-                    raise ValueError("Each table row must be a list.")
+                    raise ValueError(f"Table row {r_idx} must be a list.")
+                if len(r) != num_cols:
+                    raise ValueError(
+                        f"Ragged table row at {r_idx}: expected {num_cols} columns, got {len(r)}."
+                    )
                 cleaned_row = []
                 for cell in r:
+                    if isinstance(cell, (dict, list)):
+                        raise ValueError(f"Table cells cannot be nested dicts/lists.")
                     if isinstance(cell, (int, float)) and not isinstance(cell, bool):
                         cleaned_row.append(format_number_value(cell))
                     elif cell is None:

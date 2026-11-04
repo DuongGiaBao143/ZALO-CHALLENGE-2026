@@ -1,0 +1,30 @@
+# =====================================================================
+# Zalo AI Challenge 2026 — DataMate Inference with Trained SFT LoRA Model
+# Model: Qwen/Qwen2.5-Coder-7B-Instruct + Trained LoRA Adapter
+# =====================================================================
+
+model:
+  name_or_path: "Qwen/Qwen2.5-Coder-7B-Instruct"
+  local_model_dir: "/content/models/Qwen2.5-Coder-7B-Instruct"
+  backend: "transformers"
+  adapter_path: "result/sft_adapter_qwen7b/final_adapter"
+  dtype: "bfloat16"
+  max_model_len: 16384
+  max_tokens: 2048
+  temperature: 0.0
+  top_p: 1.0
+  seed: 42
+
+agent:
+  max_turns: 3
+  max_code_executions: 3
+  sandbox_timeout_sec: 25
+  max_sample_rows: 5
+  max_unique_categorical: 25
+
+paths:
+  data_dir: "data/public_test"
+  output_file: "result/submission.jsonl"
+  logs_dir: "result/logs"
+  log_file: "result/run.log"
+  work_dir: "tmp/datamate_work"

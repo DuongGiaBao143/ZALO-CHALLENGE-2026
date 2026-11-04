@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Main inference entrypoint for Zalo AI Challenge 2026 — DataMate.
 
-Reads `/data/questions.jsonl`, runs DataMateAgent, streams each prediction line-by-line
-to `/result/submission.jsonl` (flushing immediately), and writes per-question logs to
-`/result/logs/<question_id>.json` as required by the Data & Submission Format specification.
+Reads `<data_dir>/questions.jsonl`, runs single-model DataMateAgent, streams each prediction
+line-by-line to `submission.jsonl` (flushing immediately), and writes per-question logs to
+`<logs_dir>/<question_id>.json` as required by official competition rules.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -73,6 +74,18 @@ def parse_args() -> argparse.Namespace:
         help="Directory for per-question logs (default: <output_dir>/logs).",
     )
     parser.add_argument(
+        "--log-file",
+        type=str,
+        default=None,
+        help="Path to pipeline log file (default: <output_dir>/run.log).",
+    )
+    parser.add_argument(
+        "--work-dir",
+        type=str,
+        default=None,
+        help="Temporary directory for sandbox runner scripts.",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=None,
@@ -81,7 +94,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Run pipeline in dry_run mode (no GPU / vLLM required) to test I/O and formatting.",
+        help="Explicitly run pipeline in dry_run mode (no GPU required) to test I/O and formatting.",
     )
     return parser.parse_args()
 
@@ -96,10 +109,31 @@ def main() -> None:
         config.setdefault("model", {})["backend"] = "dry_run"
 
     paths_cfg = config.get("paths", {})
+
+    # Derive safe paths without attempting to write to /result on Windows
+    if args.output:
+        output_path = Path(args.output).resolve()
+    else:
+        output_path = Path(paths_cfg.get("output_file", "/result/submission.jsonl"))
+
+    if args.logs_dir:
+        logs_dir = Path(args.logs_dir).resolve()
+    else:
+        logs_dir = (output_path.parent / "logs").resolve()
+
+    if args.log_file:
+        log_file = str(Path(args.log_file).resolve())
+    elif args.output:
+        log_file = str(output_path.parent / "run.log")
+    else:
+        log_file = paths_cfg.get("log_file", "/result/run.log")
+
+    if args.work_dir:
+        config.setdefault("paths", {})["work_dir"] = str(Path(args.work_dir).resolve())
+    elif args.output and str(paths_cfg.get("work_dir", "")).startswith("/"):
+        config.setdefault("paths", {})["work_dir"] = str(output_path.parent / "tmp_work")
+
     data_dir = Path(args.data_dir or paths_cfg.get("data_dir", "/data"))
-    output_path = Path(args.output or paths_cfg.get("output_file", "/result/submission.jsonl"))
-    logs_dir = Path(args.logs_dir) if args.logs_dir else (output_path.parent / "logs")
-    log_file = paths_cfg.get("log_file", str(output_path.parent / "run.log"))
 
     setup_logging(log_file)
     logger = logging.getLogger("run_inference")
@@ -125,7 +159,7 @@ def main() -> None:
             try:
                 questions.append(QuestionItem.from_dict(json.loads(line)))
             except Exception as exc:
-                logger.error("Invalid JSON on line %d of %s: %s", line_no, questions_path, exc)
+                logger.error("Invalid JSON or metadata on line %d of %s: %s", line_no, questions_path, exc)
                 raise
 
     if args.limit is not None and args.limit > 0:
@@ -134,6 +168,7 @@ def main() -> None:
     logger.info("Loaded %d questions from %s", len(questions), questions_path)
     start_time = time.time()
 
+    # Initialize agent (fails fast if weights missing or unsupported backend)
     agent = DataMateAgent(config=config, data_dir=data_dir)
 
     with output_path.open("w", encoding="utf-8") as out_f:
@@ -143,15 +178,16 @@ def main() -> None:
                 sub_item, trace = agent.answer_question_with_trace(q_item)
             except Exception as exc:
                 logger.exception(
-                    "Unhandled error on question %s, falling back to abstain: %s",
+                    "Per-question runtime exception on question %s; recording explicit abstain: %s",
                     q_item.id,
                     exc,
                 )
-                sub_item = SubmissionItem.abstain(q_item.id)
+                sub_item = SubmissionItem.abstain(q_item.id, reason=f"Runtime exception: {exc}")
                 trace = {
                     "id": q_item.id,
                     "business_id": q_item.business_id,
                     "question": q_item.question,
+                    "as_of_date": q_item.as_of_date,
                     "final_answer": sub_item.to_dict(),
                     "elapsed_time_sec": round(time.time() - q_t0, 4),
                     "error": str(exc),
@@ -160,7 +196,8 @@ def main() -> None:
             out_f.write(json.dumps(sub_item.to_dict(), ensure_ascii=False) + "\n")
             out_f.flush()
 
-            # Write per-question log to /result/logs/<id>.json (Rule 8 & data.md requirement)
+            # Write per-question log to <logs_dir>/<question_id>.json
+            # Note: question_id is already validated against ^[A-Za-z0-9_\-]+$
             q_log_file = logs_dir / f"{q_item.id}.json"
             with q_log_file.open("w", encoding="utf-8") as lf:
                 json.dump(trace, lf, ensure_ascii=False, indent=2)

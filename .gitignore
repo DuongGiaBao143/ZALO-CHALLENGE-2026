@@ -15,6 +15,7 @@ result/*
 
 # 3. Model Weights & Checkpoints (Rule 2: declare in README, do not push to git)
 models/
+Model/
 weights/
 checkpoints/
 lora_adapters/
@@ -68,3 +69,12 @@ Thumbs.db
 # 7. Environment secrets
 .env
 .env.local
+
+# Local datasets/derived labels; already tracked files remain tracked
+/data/
+/eval_gold/
+
+# Local caches and experiment tracking
+.pytest_cache/
+.cache/
+wandb/

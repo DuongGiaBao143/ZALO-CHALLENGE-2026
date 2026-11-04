@@ -1,0 +1,30 @@
+# =====================================================================
+# Zalo AI Challenge 2026 — DataMate Pilot Evaluation Config
+# Model: Qwen/Qwen2.5-Coder-7B-Instruct (Zero-Shot / Base, no fine-tuning)
+# Hardware: 1 x NVIDIA A100 (40GB / 80GB VRAM)
+# =====================================================================
+
+model:
+  name_or_path: "Qwen/Qwen2.5-Coder-7B-Instruct"
+  local_model_dir: "/workspace/models/Qwen2.5-Coder-7B-Instruct"
+  backend: "transformers"           # Baseline runner: transformers (bf16, greedy, batch 1)
+  dtype: "bfloat16"                 # Ampere native bfloat16
+  max_model_len: 16384              # Target total context budget (input + generated <= 16384)
+  max_tokens: 2048                  # Maximum new generated tokens per turn
+  temperature: 0.0                  # Greedy deterministic generation
+  top_p: 1.0
+  seed: 42
+
+agent:
+  max_turns: 3                      # Max multi-turn dialogue loops
+  max_code_executions: 3            # Max sandbox executions per question
+  sandbox_timeout_sec: 20           # 20s code execution timeout
+  max_sample_rows: 5                # Schema preview row sample limit
+  max_unique_categorical: 25        # Schema preview distinct categorical limit
+
+paths:
+  data_dir: "data/train"
+  output_file: "result/baseline_7b_pilot/submission.jsonl"
+  logs_dir: "result/baseline_7b_pilot/logs"
+  log_file: "result/baseline_7b_pilot/run.log"
+  work_dir: "tmp/work_pilot"        # Sandbox execution directory (isolated from gold)

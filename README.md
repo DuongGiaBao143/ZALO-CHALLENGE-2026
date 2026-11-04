@@ -1,166 +1,78 @@
-# Zalo AI Challenge 2026 — DataMate (Team Repository)
+# DataMate — Qwen7B
 
-Repository chính thức của đội thi cho bài toán **DataMate: Natural-Language Vietnamese Question Answering over Tabular Data** tại **Zalo AI Challenge 2026**.
+Agent trả lời câu hỏi tiếng Việt trên CSV, Excel và SQLite bằng cách sinh Python, chạy code, đọc kết quả/lỗi rồi trả đáp án có kiểu dữ liệu.
 
----
+Pipeline hiện tại dùng **Qwen/Qwen2.5-Coder-7B-Instruct**. LoRA được nạp khi đánh giá bản đã fine-tune; bước sinh dữ liệu mặc định vẫn dùng pretrained. Model weights, artifacts và các thử nghiệm cũ nằm ngoài phạm vi Git.
 
-## 📚 Tài liệu cuộc thi (Đã dịch sang tiếng Việt)
+## Luồng làm việc
 
-Tất cả thành viên trong team **bắt buộc đọc kỹ 5 file tài liệu dưới đây** trước khi code:
-1. 📄 [Mô tả bài toán (`description.md`)](./docs/description.md): Tổng quan bài toán, định dạng Input/Output.
-2. 🗂️ [Mô tả Dữ liệu & Định dạng Nộp bài (`data.md`)](./docs/data.md): Cấu trúc gói dữ liệu `train` (30 shop, 3.000 câu) và `public_test` (14 shop, 1.000 câu), quy tắc `rulebook.md`, `predict.sh` và `/result/logs/`.
-3. 📊 [Cách thức chấm điểm (`evaluation.md`)](./docs/evaluation.md): Công thức **Penalized Accuracy ($\text{PA}$)** ($+1 / 0 / -1$), quy tắc chuẩn hóa `string` (`Unicode NFC`), quy tắc `list`/`table`/`ranking`.
-4. ⚖️ [Thể lệ & Yêu cầu kỹ thuật (`rule.md`)](./docs/rule.md): Giới hạn tổng tham số $\le 15\text{B}$, chạy hoàn toàn offline trong Docker trên `2 × NVIDIA RTX 5090 (64GB VRAM)`, `CUDA ≥ 12.8`, điều kiện tái lập kết quả $|\text{PA}_{\text{uploaded}} - \text{PA}_{\text{re-run}}| \le 0.03$.
-5. 🚀 [Hướng dẫn & Lịch trình nộp bài (`submission_guidance.md`)](./docs/submission_guidance.md): Các mốc thời gian Vòng Public Test (`26/10 – 16/11`) và Vòng Private Test (`20/11 – 23/11`).
+| Bước | Notebook | Công việc |
+|---|---|---|
+| 1 | [Sinh và lọc SFT](notebooks/01_generate_sft_dataset_qwen7b.ipynb) | Nhận folder, README, schema, câu hỏi/ngày mốc; sinh/chạy code, lọc bằng đáp án train |
+| 2 | [Train LoRA](notebooks/02_train_sft_qwen7b_lora.ipynb) | Huấn luyện adapter, tính loss trên assistant completion cuối, lưu adapter và log |
+| 2 — Kaggle | [Train 208 mẫu trên 2×T4](notebooks/02_train_sft_qwen7b_kaggle_2t4_208.ipynb) | FP16 LoRA + FSDP, kiểm tra token, checkpoint/resume; xem [hướng dẫn](docs/KAGGLE_QWEN7B_208.md) |
+| 3 | [Suy luận với adapter](notebooks/03_run_inference_sft_qwen7b.ipynb) | Nạp base weights + adapter, chạy agent và xuất JSONL |
+| Đối chứng | [Pilot pretrained](notebooks/datamate_baseline_7b_pilot.ipynb) | Đánh giá một mẫu nhỏ bằng model gốc |
 
----
+Notebook cần repo/source đi kèm, dữ liệu và đường dẫn weights/Drive phù hợp runtime. Các đường dẫn `/content/...` trong config dành cho Colab, cần chỉnh khi dùng môi trường khác. Cell đang mở từ notebook cũ không tự cập nhật khi file trên Drive thay đổi.
 
-## 🏗️ Kiến trúc hệ thống (System Architecture)
+Đầu vào bước 1 gồm chỉ dẫn Python/JSON ngắn, `BUSINESS_DIR`, README, file/sheet, mọi cột/dtype, câu hỏi và `as_of_date`. Sheet cùng cấu trúc được gộp schema. Code đọc rulebook/lịch và dữ liệu thật khi cần; gold không nằm trong prompt. Xem [đặc tả bước 1](docs/STAGE1_FOLDER_SCHEMA.md).
+
+`verified_sft_dataset.jsonl` ở gốc repo chỉ giữ `id`, `business_id`, `code`. Hai script train tự dựng messages từ dữ liệu BTC được chỉ định bằng `--data-dir` (mặc định `data/train`); prompt dùng biến runtime thay cho đường dẫn máy. Có thể dùng `scripts/build_sft_dataset.py` để dựng trước messages rồi train mà không mang raw data. Bundle Kaggle 890 portable mang dataset gọn và raw train read-only; notebook build context một lần trên Kaggle trước khi FSDP. Xem [hướng dẫn 890 + HF](docs/KAGGLE_QWEN7B_890_PORTABLE.md). Sửa dataset không cập nhật adapter đã train hay các ZIP/Input Kaggle cũ.
+
+Runtime hỗ trợ vòng code → observation/lỗi → sửa/tính tiếp có giới hạn lượt. Kết quả JSONL có dạng:
+
+```json
+{"id":"q_example","type":"number","answer":123}
+```
+
+`unanswerable` dành cho câu thiếu căn cứ dữ liệu; `abstain` dành cho việc agent chủ động từ chối. Xem quy tắc kiểu đáp án và chấm local trong [docs/evaluation.md](docs/evaluation.md).
+
+## Cấu trúc
 
 ```text
-<split>/questions.jsonl + <split>/data/<business_id> (.csv, .xlsx, .sqlite, README.md)
-       │
-       ▼
-┌───────────────────────────────────────────────────────────────────┐
-│ 1. Data Profiler (`src/profiler/business_loader.py`)              │
-│    Trích xuất tự động tên bảng, tên cột, kiểu dữ liệu, dòng mẫu   │
-│    và các giá trị phân loại (categorical values) của doanh nghiệp │
-└───────────────────────────────────────────────────────────────────┘
-       │
-       ▼
-┌───────────────────────────────────────────────────────────────────┐
-│ 2. Time & Rulebook Resolver (`src/time_resolver/calendar_utils.py`)│
-│    Quy đổi sẵn `as_of_date` ("tuần rồi", "tháng này", "năm ngoái")│
-│    bằng Python + nạp động `rulebook.md` và `calendar.csv`         │
-└───────────────────────────────────────────────────────────────────┘
-       │
-       ▼
-┌───────────────────────────────────────────────────────────────────┐
-│ 3. Code-Execution Agent (`src/agent/solver.py` + `sandbox.py`)    │
-│    LLM (<= 15B tham số, chạy qua vLLM) sinh code Python/Pandas/SQL│
-│    kèm bộ hàm Tiếng Việt (`parse_vn_date`, `parse_vn_number`,     │
-│    `vn_norm`), tự sửa lỗi nếu crash và ghi log `/result/logs/`    │
-└───────────────────────────────────────────────────────────────────┘
-       │
-       ▼
-┌───────────────────────────────────────────────────────────────────┐
-│ 4. Normalizer & Abstain Gate (`src/postprocess/normalizer.py`)    │
-│    Chuẩn hóa kết quả đúng chuẩn Evaluation (NFC, làm tròn 2 số).  │
-│    Nếu không chắc chắn -> trả về `abstain` (0 điểm) để tránh -1!  │
-└───────────────────────────────────────────────────────────────────┘
-       │
-       ▼
-/result/submission.jsonl + /result/logs/<question_id>.json
+notebooks/             Colab: sinh SFT, train, inference và pilot
+configs/               Cấu hình Qwen7B
+src/agent/             Prompt, backend, vòng chạy code và giao thức
+src/profiler/          Schema CSV/XLSX/SQLite và README
+src/time_resolver/     Ngày mốc và ngữ cảnh dùng chung
+src/postprocess/       Chuẩn hóa đáp án, số và ngày tiếng Việt
+src/eval/              Bộ chấm local
+src/coder_training/    Collector/helper được bộ sinh dữ liệu tái sử dụng
+scripts/               CLI sinh SFT, train, suy luận, chấm và tạo pilot
+tests/                 Test CPU, giao thức, dữ liệu và notebook
+docs/                  Tài liệu cuộc thi và đặc tả bước 1
+data/                  Dữ liệu BTC — chỉ đọc
+result/, tmp/          Artifacts/cache/kho lưu local — bị Git ignore
+eval_gold/             Gold pilot local — bị Git ignore
 ```
 
----
+## Chạy local
 
-## 📁 Cấu trúc thư mục (Repository Structure)
-
-```text
-.
-├── configs/
-│   └── default_config.yaml         # Cấu hình model (<=15B), vLLM, seed cố định, đường dẫn
-├── data/                           # Chứa dữ liệu đã giải nén cho cả team dùng chung
-│   ├── train/                      # 30 doanh nghiệp (biz_101..130), 3.000 câu hỏi + đáp án
-│   ├── public_test/                # 14 doanh nghiệp (dev_001..014), 1.000 câu hỏi
-│   └── README.md                   # Mô tả cấu trúc thư mục data
-├── result/                         # Thư mục xuất file submission.jsonl và logs/
-├── scripts/
-│   ├── run_inference.py            # Script chính chạy từ /data -> /result/submission.jsonl
-│   ├── evaluate_local.py           # Script chấm điểm Penalized Accuracy (PA) nội bộ
-│   └── verify_submission.py        # Kiểm tra định dạng submission.jsonl & in mã SHA256
-├── src/
-│   ├── schemas.py                  # Định nghĩa kiểu dữ liệu đầu vào/đầu ra
-│   ├── profiler/                   # Module 1: Đọc và trích xuất schema (.csv, .xlsx, .sqlite)
-│   ├── time_resolver/              # Module 2: Xử lý thời gian tương đối & lịch Âm-Dương
-│   ├── agent/                      # Module 3: Prompting, vLLM inference & Sandbox chạy code
-│   ├── postprocess/                # Module 4: Chuẩn hóa câu trả lời, xử lý Tiếng Việt (`vn_utils.py`)
-│   └── eval/                       # Bộ chấm điểm PA khớp 100% với evaluation.md & answers.jsonl
-├── tests/
-│   └── test_eval_and_normalizer.py # Unit tests kiểm tra bộ chấm điểm, chuẩn hóa và xử lý Tiếng Việt
-├── predict.sh                      # Entrypoint chuẩn theo yêu cầu Docker của BTC
-├── Dockerfile                      # Đóng gói chuẩn CUDA 12.8 cho 2x RTX 5090 (offline)
-├── requirements.txt                # Các thư viện Python cần thiết
-└── docs/                           # Tài liệu chi tiết cuộc thi
-    ├── description.md              # Mô tả bài toán & format I/O
-    ├── data.md                     # Mô tả dữ liệu & định dạng nộp bài
-    ├── evaluation.md               # Quy cách tính điểm Penalized Accuracy & chuẩn hóa
-    ├── rule.md                     # Thể lệ, ràng buộc phần cứng & Docker offline
-    └── submission_guidance.md      # Lịch trình & quy định nộp bài
-```
-
----
-
-## 🛠️ Hướng dẫn cài đặt & Sử dụng cho Team
-
-### 1. Cài đặt môi trường cục bộ (Local Development)
+Cài dependency xử lý dữ liệu từ `requirements.txt`. GPU inference/training còn cần stack phù hợp; tham khảo notebook và `requirements-gpu.txt`. Cài dependency thành công chưa chứng minh GPU/Docker đã được kiểm chứng.
 
 ```bash
-python -m venv .venv
-# Trên Windows PowerShell:
-.\.venv\Scripts\Activate.ps1
-# Trên Linux / macOS:
-# source .venv/bin/activate
-
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
+python -m pytest tests -q --basetemp tmp/pytest-local
+python scripts/select_pilot_subset.py
 ```
 
-### 2. Chạy Unit Tests kiểm tra hệ thống chấm điểm, chuẩn hóa & Tiếng Việt
+Lệnh chọn pilot ghi câu hỏi/manifest vào `result/baseline_7b_pilot/`, gold vào `eval_gold/`; không sửa dữ liệu gốc. `pytest --basetemp` sử dụng thư mục test tạm, không chọn thư mục chứa artifacts cần giữ.
+
+Inference bằng config đã trỏ tới checkpoint local:
 
 ```bash
-python tests/test_eval_and_normalizer.py
+python scripts/run_inference.py --config configs/baseline_7b_a100.yaml --data-dir data/train --questions-file result/baseline_7b_pilot/pilot_questions_30.jsonl --output result/pilot/submission.jsonl
+python scripts/evaluate_local.py --pred result/pilot/submission.jsonl --gold eval_gold/pilot_gold_30.jsonl
 ```
 
-### 3. Chạy thử nghiệm Pipeline trên tập `train` hoặc `public_test` (Dry-run không cần GPU)
+Chỉ chấm với gold của đúng tập ID đã chạy. Dry-run chỉ kiểm tra I/O; khớp gold không tự chứng minh code đúng nghiệp vụ trên dữ liệu khác.
 
-```bash
-python scripts/run_inference.py \
-  --config configs/default_config.yaml \
-  --data-dir data/train \
-  --output result/train_sub.jsonl \
-  --limit 10 \
-  --dry-run
-```
+## Dữ liệu và đóng gói
 
-### 4. Chấm điểm cục bộ trên tập Train (`Penalized Accuracy`)
+- `data/` chỉ đọc: không sửa, đổi tên hoặc di chuyển file gốc. Một số dữ liệu đã được theo dõi từ lịch sử repo; `.gitignore` không tự bỏ chúng khỏi Git.
+- Weights, adapter, checkpoint, log và SFT sinh ra nằm ngoài Git. Gold phải tách khỏi vùng code sinh ra được phép đọc.
+- Runner là subprocess có timeout; cách ly mạng, filesystem và tài nguyên cần được thiết lập ở môi trường thực thi.
+- `Dockerfile` và `predict.sh` là khung inference offline. Chỉ coi sẵn sàng nộp khi đã đóng gói weights và kiểm chứng trên môi trường yêu cầu.
 
-```bash
-python scripts/evaluate_local.py \
-  --pred result/train_sub.jsonl \
-  --gold data/train/answers.jsonl
-```
-
-### 5. Kiểm tra file `submission.jsonl` trước khi nộp lên cổng Zalo AI
-
-```bash
-python scripts/verify_submission.py \
-  --submission result/submission.jsonl \
-  --questions data/public_test/questions.jsonl
-```
-
----
-
-## 🐳 Đóng gói và chạy Docker Offline (Tuân thủ Rule 3, 5, 7, 8)
-
-```bash
-# 1. Build Docker image
-docker build -t datamate-solution:latest .
-
-# 2. Chạy kiểm thử giống hệt môi trường chấm của Ban Tổ chức:
-#    - Vô hiệu hóa mạng (--network none)
-#    - Mount /data ở chế độ chỉ đọc (:ro)
-#    - Thu thập kết quả tại /result/submission.jsonl và /result/logs/
-docker run --rm --gpus all --network none \
-  -v $(pwd)/data/public_test:/data:ro \
-  -v $(pwd)/result:/result \
-  datamate-solution:latest
-```
-
----
-
-## 📋 Bảng kê khai mô hình (Model Declaration — Rule 2)
-
-| Vai trò | Tên mô hình (Hugging Face) | Số tham số | Ngày phát hành | Ghi chú |
-| :--- | :--- | :---: | :---: | :--- |
-| Code Generation & QA Agent | `Qwen/Qwen2.5-Coder-14B-Instruct` | `14.7B` ($\le 15\text{B}$) | Trước `01/10/2026` | Chạy offline qua `vLLM` (`temperature=0.0`, `seed=42`) |
+Tài liệu tham khảo: [mô tả](docs/description.md), [dữ liệu](docs/data.md), [đánh giá](docs/evaluation.md), [thể lệ](docs/rule.md), [nộp bài](docs/submission_guidance.md). Đối chiếu tài liệu BTC khi chốt cách nộp chính thức.

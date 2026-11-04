@@ -1,16 +1,18 @@
 # =====================================================================
 # Zalo AI Challenge 2026 — DataMate Configuration
+# Single-Model Architecture: Qwen/Qwen2.5-Coder-7B-Instruct
+# Hardware reference: 2 x NVIDIA RTX 5090 (64GB total VRAM), CUDA >= 12.8
 # =====================================================================
 
 model:
-  # Rule 2: Total parameters across all inference models <= 15B,
-  # weights publicly released before 2026-10-01.
-  name_or_path: "Qwen/Qwen2.5-Coder-14B-Instruct"
-  backend: "vllm"               # Options: "vllm", "transformers", "dry_run"
-  tensor_parallel_size: 2       # Rule 7: 2 x NVIDIA RTX 5090 (64GB total VRAM)
+  # Exactly one inference model: Qwen/Qwen2.5-Coder-7B-Instruct
+  name_or_path: "Qwen/Qwen2.5-Coder-7B-Instruct"
+  local_model_dir: "/workspace/models/Qwen2.5-Coder-7B-Instruct"
+  backend: "vllm"               # Options: "vllm", "transformers", "dry_run", "scripted"
+  tensor_parallel_size: 1       # 1 or 2 (7B model fits comfortably in one 32GB RTX 5090)
   gpu_memory_utilization: 0.90
   max_model_len: 16384
-  dtype: "bfloat16"
+  dtype: "bfloat16"             # Blackwell / Ampere native bfloat16
 
   # Rule 8: Deterministic generation for reproducibility (|PA_uploaded - PA_rerun| <= 0.03)
   temperature: 0.0
@@ -19,11 +21,11 @@ model:
   max_tokens: 2048
 
 agent:
-  max_retries: 2                # Self-correction iterations when generated Python code fails
-  sandbox_timeout_sec: 15       # Timeout per code execution inside sandbox
-  abstain_on_error: true        # Return "abstain" (0 pts) instead of guessing (-1 pt) when uncertain
-  max_sample_rows: 5            # Number of sample rows included in schema prompt per table
-  max_unique_categorical: 25    # Max unique values shown for string/categorical columns
+  max_turns: 3                  # Bounded turns budget per question
+  max_code_executions: 3        # Maximum code executions per question
+  sandbox_timeout_sec: 15       # Subprocess timeout per execution
+  max_sample_rows: 5            # Number of sample rows in schema prompt per table
+  max_unique_categorical: 25    # Maximum unique values shown for categorical columns
 
 paths:
   data_dir: "/data"
