@@ -76,6 +76,7 @@ def resolve_relative_dates(as_of_date_str: str) -> Dict[str, str]:
         "tuần rồi / tuần trước (theo Rulebook: cả tuần liền trước, thứ Hai đến Chủ nhật)": f"{last_week_start.isoformat()} .. {last_week_end.isoformat()}",
         "cả tuần hiện tại (thứ Hai đến Chủ nhật, chỉ dùng nếu câu hỏi hỏi cả tuần lịch)": f"{this_week_start.isoformat()} .. {this_week_end.isoformat()}",
         "tháng này (theo Rulebook: từ ngày 1 đến hết hôm nay)": f"{this_month_start.isoformat()} .. {today.isoformat()}",
+        "cùng kỳ tháng trước / so với tháng trước (theo Rulebook: cùng số ngày từ ngày 1 đến ngày trùng hôm nay ở tháng trước)": f"{last_month_start.isoformat()} .. {last_month_same_period_end.isoformat()}",
         "so với tháng trước (cùng số ngày từ ngày 1 đến ngày trùng hôm nay ở tháng trước)": f"{last_month_start.isoformat()} .. {last_month_same_period_end.isoformat()}",
         "tháng rồi / tháng trước (theo Rulebook: cả tháng liền trước, từ ngày 1 đến hết tháng)": f"{last_month_start.isoformat()} .. {last_month_end.isoformat()}",
         "cả tháng lịch hiện tại (từ ngày 1 đến hết tháng, chỉ dùng nếu câu hỏi hỏi đích danh Tháng M/YYYY)": f"{this_month_start.isoformat()} .. {this_month_end.isoformat()}",
@@ -85,6 +86,11 @@ def resolve_relative_dates(as_of_date_str: str) -> Dict[str, str]:
         "quý trước (cả quý liền trước)": f"Q{last_q}/{last_q_year} ({last_quarter_start.isoformat()} .. {last_quarter_end.isoformat()})",
         "năm nay (cả năm lịch YYYY)": f"{today.year} ({this_year_start.isoformat()} .. {this_year_end.isoformat()})",
         "năm ngoái / năm trước (cả năm lịch YYYY-1)": f"{today.year - 1} ({last_year_start.isoformat()} .. {last_year_end.isoformat()})",
+        "dịp Tết 2026 (23 tháng Chạp đến mùng 10 tháng Giêng theo Rulebook)": "2026-02-10 .. 2026-02-26",
+        "17 ngày ngay trước Tết 2026 (theo Rulebook)": "2026-01-24 .. 2026-02-09",
+        "dịp Tết 2025 (23 tháng Chạp đến mùng 10 tháng Giêng theo Rulebook)": "2025-01-22 .. 2025-02-07",
+        "17 ngày ngay trước Tết 2025 (theo Rulebook)": "2025-01-05 .. 2025-01-21",
+        "quy ước ca làm việc (theo Rulebook)": "Ca sáng: 06:00 - 13:59 | Ca chiều: 14:00 - 21:59",
     }
 
 

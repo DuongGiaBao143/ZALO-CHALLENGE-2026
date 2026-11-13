@@ -64,7 +64,7 @@ def test_pilot_cli_selects_vllm_and_rejects_four_bit_combo(monkeypatch):
 
 def test_kaggle_notebook_uses_vllm_after_training_and_keeps_gold_out_of_training():
     root = Path(__file__).resolve().parents[1]
-    nb = json.loads((root / 'notebooks/02_train_sft_qwen7b_kaggle_2t4_890.ipynb').read_text(encoding='utf-8'))
+    nb = json.loads((root / 'notebooks/Train_Qwen_kaggle.ipynb').read_text(encoding='utf-8'))
     source = []
     for cell in nb['cells']:
         if cell['cell_type'] == 'code':
@@ -76,42 +76,89 @@ def test_kaggle_notebook_uses_vllm_after_training_and_keeps_gold_out_of_training
     evaluate = next(i for i, text in enumerate(source) if "'--backend', 'vllm'" in text)
     assert train < install < evaluate
     assert "'--tensor-parallel-size', '2'" in source[evaluate]
-    assert "'evaluation/train'" in source[evaluate] and 'bundle /' in source[evaluate]
+    assert "EVAL_DATA = eval_bundle / 'data/train'" in source[evaluate]
+    assert source[evaluate].index('if shop_overlap:') < source[evaluate].index('subprocess.Popen')
     assert '--gold-file' not in source[train] and 'pilot_gold' not in source[train]
     assert "'--system-site-packages', '--without-pip'" in source[install]
 
 
-def test_pilot_runs_vllm_config_and_writes_score_report(tmp_path, monkeypatch):
+@pytest.mark.parametrize('vram_gib,capability,tp,override,batch_size,quantized', [
+    (15, (7, 5), 2, None, 1, False),
+    (15, (7, 5), 1, None, 1, True),
+    (24, (8, 9), 1, None, 4, False),
+    (80, (9, 0), 1, None, 16, False),
+    (80, (9, 0), 1, 3, 3, False),
+])
+def test_pilot_runs_vllm_config_and_writes_score_report(
+    tmp_path, monkeypatch, vram_gib, capability, tp, override, batch_size, quantized
+):
     import scripts.evaluate_pilot_30 as pilot
     base, adapter = make_inputs(tmp_path)
     questions = tmp_path / 'questions.jsonl'
     gold = tmp_path / 'gold.jsonl'
     output = tmp_path / 'evaluation'
-    questions.write_text('\n'.join(json.dumps(dict(id=f'q{i}', business_id='biz1',
-        question='Count rows', as_of_date='2026-05-29')) for i in range(2)))
-    gold.write_text('\n'.join(json.dumps(dict(id=f'q{i}', type='number', answer=1)) for i in range(2)))
+    question_rows = [dict(id=f'q{i}', business_id='biz1', question='Count rows', as_of_date='2026-05-29')
+                     for i in range(18)]
+    questions.write_text('\n'.join(map(json.dumps, question_rows)))
+    gold.write_text('\n'.join(json.dumps(dict(id=f'q{i}', type='unanswerable' if i == 1 else 'number',
+                                               answer=None if i == 1 else 1)) for i in range(len(question_rows))))
+    count = len(question_rows)
+    variant = 'core'
+    options = []
+    if override is not None:
+        excluded = tmp_path / 'excluded.jsonl'
+        excluded.write_text(json.dumps(question_rows[-1]))
+        count -= 1
+        variant = 'baseline'
+        options = ['--max-num-seqs', str(override), '--prompt-variant', variant,
+                   '--exclude-questions-file', str(excluded)]
     configs = []
+    sizes = []
     class Agent:
         def __init__(self, config, data_dir):
             configs.append(config)
+        @staticmethod
+        def answer(question):
+            if question.id == 'q0':
+                prediction = pilot.SubmissionItem(id=question.id, type='number', answer=1)
+            elif question.id in {'q1', 'q2'}:
+                prediction = pilot.SubmissionItem(id=question.id, type='unanswerable', answer=None)
+            else:
+                prediction = pilot.SubmissionItem.abstain(question.id)
+            trace = dict(id=question.id, preflight={'cache_hit': question.id != 'q0', 'seconds': 0.1},
+                         attempts=[{'prompt_messages': [{'role': 'user', 'content': 'count'}]}])
+            return prediction, trace
         def answer_question_with_trace(self, question):
-            prediction = (pilot.SubmissionItem(id=question.id, type='number', answer=1)
-                          if question.id == 'q0' else pilot.SubmissionItem.abstain(question.id))
-            return prediction, dict(id=question.id)
+            sizes.append(1)
+            return self.answer(question)
+        def answer_questions_with_trace(self, questions):
+            sizes.append(len(questions))
+            return [self.answer(question) for question in questions]
     monkeypatch.setattr(pilot, 'DataMateAgent', Agent)
     monkeypatch.setitem(sys.modules, 'torch', SimpleNamespace(cuda=SimpleNamespace(
-        is_available=lambda: True, device_count=lambda: 2, get_device_name=lambda i: 'T4',
-        get_device_properties=lambda i: SimpleNamespace(total_memory=15 * 1024**3))))
+        is_available=lambda: True, device_count=lambda: tp, get_device_name=lambda i: 'Mock GPU',
+        get_device_capability=lambda i: capability,
+        get_device_properties=lambda i: SimpleNamespace(total_memory=vram_gib * 1024**3))))
     monkeypatch.setenv('DATAMATE_ALLOW_ONLINE', '0')
     monkeypatch.delenv('PYTORCH_CUDA_ALLOC_CONF', raising=False)
-    monkeypatch.setattr(sys, 'argv', ['pilot', '--backend', 'vllm', '--tensor-parallel-size', '2',
+    monkeypatch.setattr(sys, 'argv', ['pilot', '--backend', 'vllm', '--tensor-parallel-size', str(tp),
         '--base-model', str(base), '--adapter-path', str(adapter), '--questions-file', str(questions),
-        '--gold-file', str(gold), '--data-dir', str(tmp_path), '--output-dir', str(output)])
+        '--gold-file', str(gold), '--data-dir', str(tmp_path), '--output-dir', str(output),
+        *options])
     pilot.main()
     report = json.loads((output / 'evaluation_report.json').read_text())
-    assert report['penalized_accuracy'] == 0.5 and report['correct'] == 1 and report['abstain'] == 1
+    assert report['penalized_accuracy'] == pytest.approx(1 / count)
+    assert report['correct'] == 2 and report['abstain'] == count - 3
     assert report['backend'] == 'vllm' and report['seconds_per_question'] >= 0
-    assert configs[0]['model']['load_in_4bit'] is False
+    assert report['baseline_pa'] is None and report['delta_pa'] is None
+    assert configs[0]['model']['load_in_4bit'] is quantized
+    assert configs[0]['model']['max_num_seqs'] == report['max_num_seqs'] == batch_size
+    assert configs[0]['agent']['eval_core_rules'] == (variant == 'core')
+    assert report['prompt_variant'] == variant and report['total_questions'] == count
+    assert report['unanswerable'] == {'correct': 1, 'wrong': 1}
+    assert report['model_turns'] == count and report['prompt_tokens'] is None
+    assert report['preflight']['cold']['count'] == 1 and report['preflight']['cache_hit']['count'] == count - 1
+    assert sizes == [min(batch_size, count - i) for i in range(0, count, batch_size)]
     assert configs[0]['model']['local_model_dir'] == str(base.resolve())
     assert pilot.os.environ['DATAMATE_ALLOW_ONLINE'] == '0'
     assert 'PYTORCH_CUDA_ALLOC_CONF' not in pilot.os.environ

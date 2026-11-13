@@ -8,9 +8,33 @@ import pytest
 
 from src.profiler.business_loader import (
     _detect_excel_header_candidate,
+    format_eval_schema,
     format_profile_for_prompt,
     profile_business_package,
 )
+
+
+def test_eval_preflight_keeps_real_source_names_and_bounded_examples(tmp_path):
+    workbook = tmp_path / "DanhSachHoaDon.xlsx"
+    frame = pd.DataFrame({"Trạng thái": [f"label-{i}" for i in range(33)],
+                          "Tên khách hàng": ["private"] * 33})
+    with pd.ExcelWriter(workbook, engine="openpyxl") as writer:
+        frame.to_excel(writer, sheet_name="Sheet1", startrow=2, index=False)
+        writer.sheets["Sheet1"]["A1"] = "Báo cáo"
+    with sqlite3.connect(tmp_path / "pos.sqlite") as connection:
+        connection.execute("CREATE TABLE orders (TinhTrang TEXT, NgayLap TEXT, Name TEXT)")
+        connection.execute("INSERT INTO orders VALUES ('completed', '01/12/2025', 'private')")
+
+    profile = profile_business_package(tmp_path, "shop", metadata_only=True)
+    excel, database = profile.tables
+    assert excel.candidate_header_row == 2 and excel.row_count is None
+    assert excel.categorical_values == {"Trạng thái": [f"label-{i}" for i in range(5)]}
+    assert database.categorical_values == {"TinhTrang": ["completed"], "NgayLap": ["01/12/2025"]}
+    assert database.row_count is None and database.columns == ["TinhTrang", "NgayLap", "Name"]
+    schema = format_eval_schema(profile.tables)
+    assert "sheet_name='Sheet1', header=2" in schema
+    assert "File: 'pos.sqlite'\n  Bảng: 'orders'" in schema
+    assert "private" not in schema and "label-5" not in schema
 
 
 class TestProfiler:

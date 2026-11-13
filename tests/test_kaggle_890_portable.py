@@ -11,9 +11,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class FakeApi:
-    def __init__(self, private=True, missing_remote=False):
+    def __init__(self, private=True, missing_remote=False, gated=False):
         self.private = private
         self.missing_remote = missing_remote
+        self.gated = gated
         self.calls = []
 
     def whoami(self):
@@ -23,7 +24,7 @@ class FakeApi:
         self.calls.append(('create', kwargs))
 
     def repo_info(self, *args, **kwargs):
-        return SimpleNamespace(private=self.private)
+        return SimpleNamespace(private=self.private, gated=self.gated)
 
     def upload_file(self, **kwargs):
         self.calls.append(('probe', kwargs))
@@ -46,18 +47,26 @@ def test_preflight_checks_private_repo_and_actual_write():
     assert api.calls[0][1]['private'] is True
 
 
-def test_public_destination_is_rejected_without_upload():
-    api = FakeApi(private=False)
-    with pytest.raises(ValueError, match='private'):
+@pytest.mark.parametrize('gated', [False, 'auto'])
+def test_public_destination_is_rejected_without_manual_approval(gated):
+    api = FakeApi(private=False, gated=gated)
+    with pytest.raises(ValueError, match='manual access approval'):
         upload(api, 'owner/public', 'runs/test')
     assert all(call[0] not in ('upload', 'probe') for call in api.calls)
+
+
+def test_manual_gated_destination_passes_write_probe():
+    api = FakeApi(private=False, gated='manual')
+    result = upload(api, 'Crinkk/Zalo-challenge', 'runs/test')
+    assert result['status'] == 'write_verified'
+    assert api.calls[-1][0] == 'probe'
 
 
 @pytest.mark.parametrize('missing_remote', [False, True])
 def test_final_upload_verifies_both_files_on_committed_revision(tmp_path, missing_remote):
     for name in ['adapter_config.json', 'adapter_model.safetensors']:
         (tmp_path / name).write_bytes(b'adapter')
-    api = FakeApi(missing_remote=missing_remote)
+    api = FakeApi(private=False, gated='manual', missing_remote=missing_remote)
     if missing_remote:
         with pytest.raises(RuntimeError, match='both required files'):
             upload(api, 'owner/private', 'runs/test', tmp_path)
@@ -87,7 +96,7 @@ def test_value_error_is_reported_without_repeated_blind_retries(tmp_path):
 
 def test_notebooks_are_valid_and_upload_precedes_gpu_evaluation():
     import nbformat
-    nb = nbformat.read(ROOT / 'notebooks/02_train_sft_qwen7b_kaggle_2t4_890.ipynb', as_version=4)
+    nb = nbformat.read(ROOT / 'notebooks/Train_Qwen_kaggle.ipynb', as_version=4)
     nbformat.validate(nb)
     code = []
     for cell in nb.cells:
@@ -96,7 +105,13 @@ def test_notebooks_are_valid_and_upload_precedes_gpu_evaluation():
             assert cell.outputs == [] and cell.execution_count is None
             code.append(cell.source)
     full = '\n'.join(code)
-    assert 'portable-sft-hf-v3' in full
+    assert 'shop-holdout-v1' in full
+    assert "INIT_ADAPTER_DIR = ''" in full and "RESUME_FROM_CHECKPOINT = ''" in full
+    assert 'TRAIN_ROWS = 1053' in full
+    assert "HF_INPUT_REPO = 'Crinkk/Zalo-challenge'" in full
+    assert "HF_REPO_NAME = 'Crinkk/Zalo-challenge'" in full
+    assert 'download_verified_bundle(EVAL_BUNDLE_FILE' in full
+    assert '/kaggle/input/' not in full
     assert "{'id', 'business_id', 'code'}" in full
     assert "'scripts/build_sft_dataset.py'" in full
     assert full.index('uploaded = run_hf_upload(adapter_to_upload)') < full.index("'vllm==0.10.2'")

@@ -26,6 +26,7 @@ agent:
   sandbox_timeout_sec: 15       # Subprocess timeout per execution
   max_sample_rows: 5            # Number of sample rows in schema prompt per table
   max_unique_categorical: 25    # Maximum unique values shown for categorical columns
+  abstain_on_unanswerable: true # Abstain Gate: convert unanswerable to safe abstain (0 pts instead of -1 penalty)
 
 paths:
   data_dir: "/data"

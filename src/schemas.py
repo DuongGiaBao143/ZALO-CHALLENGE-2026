@@ -131,7 +131,7 @@ class TableSchema:
     table_name: str
     columns: List[str]
     dtypes: Dict[str, str]
-    row_count: int
+    row_count: Optional[int]
     sample_rows: List[Dict[str, Any]] = field(default_factory=list)
     categorical_values: Dict[str, List[str]] = field(default_factory=dict)
     status: str = "ok"  # "ok", "partial", "error"
@@ -142,6 +142,8 @@ class TableSchema:
     truncated_rows: bool = False
     truncated_categorical: bool = False
     error_message: Optional[str] = None
+    column_unique_counts: Dict[str, int] = field(default_factory=dict)
+    exhaustive_columns: List[str] = field(default_factory=list)
 
 
 @dataclass

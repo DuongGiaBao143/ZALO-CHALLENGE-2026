@@ -132,7 +132,8 @@ def test_completion_logits_match_full_qwen_loss_and_gradients(monkeypatch):
             torch.testing.assert_close(p.grad, gradients[name], atol=1e-6, rtol=1e-5)
 
 
-def test_tiny_fsdp_adapter_optimizer_roundtrip(tmp_path):
+@pytest.mark.parametrize('split_vocabulary', [False, True])
+def test_tiny_fsdp_adapter_optimizer_roundtrip(tmp_path, split_vocabulary):
     pytest.importorskip('peft')
     # Isolate the process group and FSDP state from other tests.
     script = r'''
@@ -144,14 +145,14 @@ import torch.distributed as dist
 from functools import partial
 from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
     CheckpointImpl, apply_activation_checkpointing, checkpoint_wrapper)
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, FullStateDictConfig, FullOptimStateDictConfig
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, FullStateDictConfig, FullOptimStateDictConfig, MixedPrecision
 from transformers import Qwen2Config, Qwen2ForCausalLM
 from peft import LoraConfig, get_peft_model
 from peft.utils.other import fsdp_auto_wrap_policy
 from accelerate.utils import load_fsdp_optimizer
 from accelerate.state import PartialState
 from src.coder_training.fsdp_adapter import collect_lora_state, load_lora_state
-from src.coder_training.fsdp_adapter import AdapterCheckpointMixin, export_adapter
+from src.coder_training.fsdp_adapter import AdapterCheckpointMixin, export_adapter, prepare_fsdp_qlora_model
 from src.coder_training.checkpoints import mark_checkpoint_complete, verify_checkpoint
 
 root = Path(sys.argv[1]).resolve()
@@ -167,7 +168,42 @@ def build():
     model = get_peft_model(Qwen2ForCausalLM(Qwen2Config(vocab_size=32, hidden_size=16, intermediate_size=32,
         num_hidden_layers=1, num_attention_heads=2, num_key_value_heads=1, use_cache=False)),
         LoraConfig(task_type='CAUSAL_LM', r=2, lora_alpha=4, target_modules=['q_proj', 'v_proj'], lora_dropout=0))
-    wrapped = FSDP(model, auto_wrap_policy=fsdp_auto_wrap_policy(model), device_id=torch.device('cpu'), use_orig_params=False)
+    policy = fsdp_auto_wrap_policy(model)
+    mixed_precision = None
+    if SPLIT_VOCABULARY:
+        policy = prepare_fsdp_qlora_model(model)
+        assert model.get_input_embeddings().weight.dtype == torch.float16
+        assert model.get_output_embeddings().weight.dtype == torch.float16
+        assert all(p.dtype == torch.float32 for n,p in model.named_parameters() if 'lora_' in n)
+        # Transformers 4.57.1 resets the policy immediately before accelerator.prepare().
+        import ast
+        class BaseTrainer:
+            def _fsdp_qlora_plugin_updates(self):
+                self.accelerator.state.fsdp_plugin.auto_wrap_policy = fsdp_auto_wrap_policy(self.model)
+                self.accelerator.state.fsdp_plugin.mixed_precision_policy = 'nf4-float32-storage'
+        tree = ast.parse(Path('scripts/train_sft_kaggle_2t4.py').read_text(encoding='utf-8'))
+        trainer_class = next(n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name == 'CompletionTrainer')
+        namespace = dict(Trainer=BaseTrainer, AdapterCheckpointMixin=AdapterCheckpointMixin,
+            args=SimpleNamespace(load_in_4bit=True), prepare_fsdp_qlora_model=prepare_fsdp_qlora_model)
+        exec(compile(ast.Module(body=[trainer_class], type_ignores=[]), '<actual-completion-trainer>', 'exec'), namespace)
+        trainer = namespace['CompletionTrainer']()
+        trainer.model = model
+        training_plugin = SimpleNamespace(auto_wrap_policy=policy)
+        trainer.accelerator = SimpleNamespace(state=SimpleNamespace(fsdp_plugin=training_plugin))
+        trainer._fsdp_qlora_plugin_updates()
+        assert training_plugin.mixed_precision_policy == 'nf4-float32-storage'
+        policy = training_plugin.auto_wrap_policy
+        mixed_precision = MixedPrecision(param_dtype=torch.float32, reduce_dtype=torch.float32,
+                                         buffer_dtype=torch.float32)
+        from peft.tuners.lora import LoraLayer
+        for module in model.modules():
+            if isinstance(module, LoraLayer):
+                module.cast_input_dtype_enabled = False
+    wrapped = FSDP(model, auto_wrap_policy=policy, device_id=torch.device('cpu'),
+                   use_orig_params=False, mixed_precision=mixed_precision)
+    if SPLIT_VOCABULARY:
+        assert isinstance(wrapped.module.get_input_embeddings(), FSDP)
+        assert isinstance(wrapped.module.get_output_embeddings(), FSDP)
     apply_activation_checkpointing(wrapped,
         checkpoint_wrapper_fn=partial(checkpoint_wrapper, checkpoint_impl=CheckpointImpl.NO_REENTRANT),
         auto_wrap_policy=fsdp_auto_wrap_policy(model))
@@ -233,4 +269,5 @@ try:
 finally:
     dist.destroy_process_group()
 '''
+    script = script.replace('SPLIT_VOCABULARY', repr(split_vocabulary))
     subprocess.run([sys.executable, '-c', script, str(tmp_path)], check=True, timeout=120)

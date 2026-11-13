@@ -1,18 +1,12 @@
 # =====================================================================
 # Zalo AI Challenge 2026 — DataMate Dockerfile
-# Single-model baseline: Qwen/Qwen2.5-Coder-7B-Instruct
+# Model architecture: deepseek-ai/DeepSeek-R1-Distill-Qwen-14B (or Qwen2.5-Coder-7B)
 # Hardware reference (Rule 7):
 #   - 2 x NVIDIA RTX 5090 (Blackwell, 32 GB VRAM each = 64 GB total)
 #   - CUDA >= 12.8 with matching PyTorch / vLLM build
 #   - Fully offline execution (--network none, Rule 3)
 #   - /data mounted read-only (:ro, Rule 5)
 #   - Output at /result/submission.jsonl and logs at /result/logs/
-#
-# IMPORTANT SUBMISSION NOTICE:
-# An image is NOT submission-ready until:
-# 1. GPU wheels for PyTorch and vLLM are successfully built and verified on target CUDA 12.8.
-# 2. Pretrained weights for Qwen2.5-Coder-7B-Instruct are copied into /workspace/models/Qwen2.5-Coder-7B-Instruct.
-# 3. An offline end-to-end verification run on GPU completes within limits without network.
 # =====================================================================
 
 FROM nvidia/cuda:12.8.0-devel-ubuntu22.04
@@ -55,9 +49,13 @@ COPY scripts/ /workspace/scripts/
 COPY predict.sh /workspace/predict.sh
 COPY README.md /workspace/README.md
 
-# Offline weights must be placed in /workspace/models/Qwen2.5-Coder-7B-Instruct
-# e.g.: COPY models/Qwen2.5-Coder-7B-Instruct /workspace/models/Qwen2.5-Coder-7B-Instruct
-RUN mkdir -p /workspace/models/Qwen2.5-Coder-7B-Instruct /tmp/datamate_work /result /result/logs && \
+# Create runtime directories for models, adapters, scratch work, and output logs
+RUN mkdir -p /workspace/models/DeepSeek-R1-Distill-Qwen-14B \
+             /workspace/models/final_adapter \
+             /workspace/models/Qwen2.5-Coder-7B-Instruct \
+             /tmp/datamate_work \
+             /result \
+             /result/logs && \
     chmod +x /workspace/predict.sh
 
 # Default command: run predict.sh reading from /data and writing to /result/submission.jsonl

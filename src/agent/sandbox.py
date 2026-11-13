@@ -45,12 +45,126 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+import unicodedata
+import numpy as np
+import pandas as pd
 
 from src.postprocess.normalizer import (
     format_number_value,
     format_percent_value,
 )
 from src.schemas import AnswerType, ProtocolKind, VALID_ANSWER_TYPES
+
+
+def strip_accents(s: Any) -> str:
+    """Strip accents and lower case for robust column name matching."""
+    text = str(s).replace('đ', 'd').replace('Đ', 'D')
+    return ''.join(c for c in unicodedata.normalize('NFD', text.lower()) if unicodedata.category(c) != 'Mn')
+
+
+def unmerge_and_ffill(
+    df: pd.DataFrame,
+    ffill_cols: Optional[List[str]] = None,
+    id_col: Optional[str] = None
+) -> pd.DataFrame:
+    """Propagate parent-level attributes down to child item rows in grouped/merged tabular data.
+    
+    Complies strictly with Rulebook Section 8:
+    'Ô để trống ở các dòng sau của cùng một nhóm dòng: giống ô đó ở dòng đầu nhóm: 
+    khách, ghi chú, trạng thái của đơn áp cho mọi dòng của đơn.'
+    """
+    if not isinstance(df, pd.DataFrame) or len(df) == 0:
+        return df
+
+    df = df.copy()
+    cols = list(df.columns)
+
+    norm_col_map = {c: strip_accents(c).replace('_', ' ').replace('-', ' ').strip() for c in cols}
+
+    detected_id = None
+    if id_col and id_col in df.columns:
+        detected_id = id_col
+    else:
+        for c, norm_c in norm_col_map.items():
+            if any(k in norm_c for k in [
+                'ma don', 'ma chung tu', 'ma phieu', 'ma hoa don',
+                'so chung tu', 'so hoa don', 'order id', 'invoice id'
+            ]):
+                detected_id = c
+                break
+
+    # 1. If explicit columns are provided, forward-fill those columns directly
+    if ffill_cols:
+        target_cols = [c for c in ffill_cols if c in df.columns]
+        if target_cols:
+            if detected_id and df[detected_id].notna().any():
+                order_group = df[detected_id].notna().cumsum()
+                df[target_cols] = df.groupby(order_group)[target_cols].ffill()
+            else:
+                df[target_cols] = df[target_cols].ffill()
+        return df
+
+    # 2. Automatic parent-column detection:
+    if detected_id and df[detected_id].isna().any():
+        child_mask = df[detected_id].isna()
+        parent_keywords = [
+            'ma', 'code', 'id', 'ngay', 'date', 'time', 'thoi gian',
+            'trang thai', 'status', 'khach', 'customer', 'nhan vien',
+            'creator', 'thu ngan', 'ghi chu', 'note', 'hinh thuc'
+        ]
+        cols_to_fill = [detected_id]
+        for c, norm_c in norm_col_map.items():
+            if c == detected_id:
+                continue
+            is_parent_name = any(k in norm_c for k in parent_keywords)
+            null_on_child = df.loc[child_mask, c].isna().mean() if child_mask.any() else 0
+            null_on_parent = df.loc[~child_mask, c].isna().mean() if (~child_mask).any() else 1
+            if is_parent_name or (null_on_child > 0.8 and null_on_parent < 0.2):
+                cols_to_fill.append(c)
+
+        order_group = df[detected_id].notna().cumsum()
+        df[cols_to_fill] = df.groupby(order_group)[cols_to_fill].ffill()
+    elif not detected_id:
+        # Fallback for generic parent columns if no explicit ID column
+        parent_keywords = ['ma don', 'ngay dat', 'ngay lap', 'trang thai', 'ten khach']
+        generic_cols = [
+            c for c, norm_c in norm_col_map.items()
+            if any(k in norm_c for k in parent_keywords) and df[c].isna().any()
+        ]
+        if generic_cols:
+            df[generic_cols] = df[generic_cols].ffill()
+
+    return df
+
+
+def unmerge_openpyxl_sheet(ws: Any) -> None:
+    """Unmerge all merged ranges in an openpyxl worksheet and replicate top-left cell values."""
+    if not hasattr(ws, 'merged_cells'):
+        return
+    for rng in list(ws.merged_cells.ranges):
+        min_col, min_row, max_col, max_row = rng.min_col, rng.min_row, rng.max_col, rng.max_row
+        top_val = ws.cell(min_row, min_col).value
+        ws.unmerge_cells(start_row=min_row, start_column=min_col, end_row=max_row, end_column=max_col)
+        for r in range(min_row, max_row + 1):
+            for c in range(min_col, max_col + 1):
+                ws.cell(r, c).value = top_val
+
+
+def load_excel_unmerge(
+    io: Any,
+    sheet_name: Any = 0,
+    header: Any = 0,
+    ffill_cols: Optional[List[str]] = None,
+    id_col: Optional[str] = None,
+    **kwargs
+) -> Any:
+    """Load Excel sheet(s) and forward-fill merged/grouped parent columns."""
+    res = pd.read_excel(io, sheet_name=sheet_name, header=header, **kwargs)
+    if isinstance(res, pd.DataFrame):
+        return unmerge_and_ffill(res, ffill_cols=ffill_cols, id_col=id_col)
+    elif isinstance(res, dict):
+        return {s: unmerge_and_ffill(df, ffill_cols=ffill_cols, id_col=id_col) for s, df in res.items()}
+    return res
 
 _CODE_BLOCK_RE = re.compile(r"```(?:python|py)?\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
 _THINK_BLOCK_RE = re.compile(r"(?:<think>.*?</think>|<\|thought\|>.*?(?:<\|/thought\|>|<channel\|>))", re.DOTALL | re.IGNORECASE)
@@ -162,6 +276,10 @@ def validate_protocol_payload(payload: Any) -> Tuple[str, Dict[str, Any]]:
         raise ValueError("Missing required 'kind' field in protocol payload. Must be 'observation' or 'final'.")
 
     kind = str(payload["kind"]).strip().lower()
+    if kind in ("unanswerable", "abstain"):
+        payload["type"] = kind
+        payload["kind"] = "final"
+        kind = "final"
 
     if kind == ProtocolKind.OBSERVATION.value:
         data = payload.get("data")
@@ -197,7 +315,11 @@ def validate_protocol_payload(payload: Any) -> Tuple[str, Dict[str, Any]]:
         # Evidence is required for all final answers
         evidence = payload.get("evidence")
         if not evidence or not isinstance(evidence, str) or not evidence.strip():
-            raise ValueError("Missing or empty 'evidence' string in final payload.")
+            if ans_type == AnswerType.ABSTAIN.value:
+                evidence = payload.get("reason") or "Abstained by agent"
+                payload["evidence"] = evidence
+            else:
+                raise ValueError("Missing or empty 'evidence' string in final payload.")
 
         raw_answer = payload.get("answer")
 
@@ -261,6 +383,11 @@ def validate_protocol_payload(payload: Any) -> Tuple[str, Dict[str, Any]]:
             rows = raw_answer.get("rows")
             if not isinstance(cols, list) or not isinstance(rows, list):
                 raise ValueError("Table answer must contain list of 'columns' and list of 'rows'.")
+
+            # Auto-convert list of dicts to list of lists if needed
+            if rows and isinstance(rows[0], dict):
+                rows = [[r.get(c) for c in cols] for r in rows]
+                raw_answer["rows"] = rows
 
             num_cols = len(cols)
             # Enforce rectangular table shape: no ragged rows allowed
@@ -350,6 +477,7 @@ json.dumps = _patched_dumps
 
 _orig_to_datetime = pd.to_datetime
 def _patched_to_datetime(arg, *args, **kwargs):
+    kwargs.setdefault('errors', 'coerce')
     try:
         res = _orig_to_datetime(arg, *args, **kwargs)
         if isinstance(res, pd.Series) and res.isna().all() and len(res) > 0 and not pd.isna(arg).all():
@@ -359,6 +487,203 @@ def _patched_to_datetime(arg, *args, **kwargs):
         return parse_vn_date(arg)
 
 pd.to_datetime = _patched_to_datetime
+
+def _smart_resolve_file(path_or_str):
+    if not isinstance(path_or_str, (str, Path)):
+        return path_or_str
+    p = str(path_or_str)
+    if os.path.exists(p):
+        return p
+    base = os.path.basename(p)
+    direct = os.path.join(BUSINESS_DIR, base)
+    if os.path.exists(direct):
+        return direct
+    try:
+        mojibake = base.encode('utf-8').decode('cp437', errors='ignore')
+        m_path = os.path.join(BUSINESS_DIR, mojibake)
+        if os.path.exists(m_path):
+            return m_path
+    except Exception:
+        pass
+    try:
+        mojibake2 = base.encode('cp437', errors='ignore').decode('utf-8', errors='ignore')
+        m2_path = os.path.join(BUSINESS_DIR, mojibake2)
+        if os.path.exists(m2_path):
+            return m2_path
+    except Exception:
+        pass
+    ext = os.path.splitext(base)[1].lower()
+    clean_target = ''.join(c.lower() for c in base if c.isalnum())
+    if clean_target and os.path.exists(BUSINESS_DIR):
+        for cand in os.listdir(BUSINESS_DIR):
+            if os.path.splitext(cand)[1].lower() == ext:
+                clean_cand = ''.join(c.lower() for c in cand if c.isalnum())
+                if clean_target in clean_cand or clean_cand in clean_target:
+                    return os.path.join(BUSINESS_DIR, cand)
+    return p
+
+def _detect_best_header(df):
+    if not isinstance(df, pd.DataFrame) or len(df) == 0:
+        return df
+    cols = [str(c) for c in df.columns]
+    unnamed_cnt = sum(1 for c in cols if c.startswith('Unnamed:') or c == 'nan' or not c.strip())
+    if unnamed_cnt / max(1, len(cols)) < 0.4:
+        return df
+    for r_idx in range(min(10, len(df))):
+        row_vals = df.iloc[r_idx].values
+        str_vals = [str(v).strip() for v in row_vals if pd.notna(v) and str(v).strip() != '' and str(v) != 'nan']
+        if len(str_vals) >= max(3, len(cols) * 0.5):
+            non_num = [v for v in str_vals if not v.replace('.', '', 1).replace(',', '', 1).replace('-', '', 1).isdigit()]
+            if len(non_num) >= len(str_vals) * 0.7:
+                new_cols = [str(v).strip() if pd.notna(v) and str(v).strip() != '' else f'col_{i}' for i, v in enumerate(row_vals)]
+                new_df = df.iloc[r_idx + 1:].copy()
+                new_df.columns = new_cols
+                new_df.reset_index(drop=True, inplace=True)
+                return new_df
+    return df
+
+_orig_read_csv = pd.read_csv
+def _smart_read_csv(filepath_or_buffer, *args, **kwargs):
+    if isinstance(filepath_or_buffer, (str, Path)):
+        filepath_or_buffer = _smart_resolve_file(filepath_or_buffer)
+    hdr_specified = ('header' in kwargs and kwargs['header'] is not None and kwargs['header'] != 0)
+    res = _orig_read_csv(filepath_or_buffer, *args, **kwargs)
+    if not hdr_specified and isinstance(res, pd.DataFrame):
+        res = _detect_best_header(res)
+    return res
+pd.read_csv = _smart_read_csv
+
+def strip_accents(s):
+    text = str(s).replace('đ', 'd').replace('Đ', 'D')
+    return ''.join(c for c in unicodedata.normalize('NFD', text.lower()) if unicodedata.category(c) != 'Mn')
+
+def unmerge_and_ffill(df, ffill_cols=None, id_col=None):
+    if not isinstance(df, pd.DataFrame) or len(df) == 0:
+        return df
+    df = df.copy()
+    cols = list(df.columns)
+    norm_col_map = {c: strip_accents(c).replace('_', ' ').replace('-', ' ').strip() for c in cols}
+    detected_id = None
+    if id_col and id_col in df.columns:
+        detected_id = id_col
+    else:
+        for c, norm_c in norm_col_map.items():
+            if any(k in norm_c for k in ['ma don', 'ma chung tu', 'ma phieu', 'ma hoa don', 'so chung tu', 'so hoa don', 'order id', 'invoice id']):
+                detected_id = c
+                break
+    if ffill_cols:
+        target_cols = [c for c in ffill_cols if c in df.columns]
+        if target_cols:
+            if detected_id and df[detected_id].notna().any():
+                order_group = df[detected_id].notna().cumsum()
+                df[target_cols] = df.groupby(order_group)[target_cols].ffill()
+            else:
+                df[target_cols] = df[target_cols].ffill()
+        return df
+    if detected_id and df[detected_id].isna().any():
+        child_mask = df[detected_id].isna()
+        parent_keywords = ['ma', 'code', 'id', 'ngay', 'date', 'time', 'thoi gian', 'trang thai', 'status', 'khach', 'customer', 'nhan vien', 'creator', 'thu ngan', 'ghi chu', 'note', 'hinh thuc']
+        cols_to_fill = [detected_id]
+        for c, norm_c in norm_col_map.items():
+            if c == detected_id:
+                continue
+            is_parent_name = any(k in norm_c for k in parent_keywords)
+            null_on_child = df.loc[child_mask, c].isna().mean() if child_mask.any() else 0
+            null_on_parent = df.loc[~child_mask, c].isna().mean() if (~child_mask).any() else 1
+            if is_parent_name or (null_on_child > 0.8 and null_on_parent < 0.2):
+                cols_to_fill.append(c)
+        order_group = df[detected_id].notna().cumsum()
+        df[cols_to_fill] = df.groupby(order_group)[cols_to_fill].ffill()
+    elif not detected_id:
+        parent_keywords = ['ma don', 'ngay dat', 'ngay lap', 'trang thai', 'ten khach']
+        generic_cols = [c for c, norm_c in norm_col_map.items() if any(k in norm_c for k in parent_keywords) and df[c].isna().any()]
+        if generic_cols:
+            df[generic_cols] = df[generic_cols].ffill()
+    return df
+
+def unmerge_openpyxl_sheet(ws):
+    if not hasattr(ws, 'merged_cells'):
+        return
+    for rng in list(ws.merged_cells.ranges):
+        min_col, min_row, max_col, max_row = rng.min_col, rng.min_row, rng.max_col, rng.max_row
+        top_val = ws.cell(min_row, min_col).value
+        ws.unmerge_cells(start_row=min_row, start_column=min_col, end_row=max_row, end_column=max_col)
+        for r in range(min_row, max_row + 1):
+            for c in range(min_col, max_col + 1):
+                ws.cell(r, c).value = top_val
+
+def load_excel_unmerge(io, sheet_name=0, header=0, ffill_cols=None, id_col=None, **kwargs):
+    res = pd.read_excel(io, sheet_name=sheet_name, header=header, **kwargs)
+    if isinstance(res, pd.DataFrame):
+        return unmerge_and_ffill(res, ffill_cols=ffill_cols, id_col=id_col)
+    elif isinstance(res, dict):
+        return {s: unmerge_and_ffill(df, ffill_cols=ffill_cols, id_col=id_col) for s, df in res.items()}
+    return res
+
+_orig_read_excel = pd.read_excel
+def _smart_read_excel(io, *args, **kwargs):
+    unmerge_flag = kwargs.pop('unmerge', None)
+    if isinstance(io, (str, Path)):
+        io = _smart_resolve_file(io)
+    sheet = kwargs.get('sheet_name')
+    hdr_specified = ('header' in kwargs and kwargs['header'] is not None and kwargs['header'] != 0)
+    try:
+        res = _orig_read_excel(io, *args, **kwargs)
+        if not hdr_specified:
+            if isinstance(res, pd.DataFrame):
+                res = _detect_best_header(res)
+            elif isinstance(res, dict):
+                res = {k: _detect_best_header(v) for k, v in res.items()}
+        if unmerge_flag or unmerge_flag is None:
+            if isinstance(res, pd.DataFrame):
+                res = unmerge_and_ffill(res)
+            elif isinstance(res, dict):
+                res = {k: unmerge_and_ffill(v) for k, v in res.items()}
+        return res
+    except (ValueError, KeyError, FileNotFoundError):
+        if sheet and isinstance(sheet, str):
+            for fname in os.listdir(BUSINESS_DIR):
+                if fname.lower().endswith(('.xlsx', '.xls')) and fname != os.path.basename(str(io)):
+                    other_path = os.path.join(BUSINESS_DIR, fname)
+                    try:
+                        other_xls = pd.ExcelFile(other_path)
+                        if sheet in other_xls.sheet_names:
+                            res = _orig_read_excel(other_path, *args, **kwargs)
+                            if not hdr_specified and isinstance(res, pd.DataFrame):
+                                res = _detect_best_header(res)
+                            if unmerge_flag or unmerge_flag is None:
+                                if isinstance(res, pd.DataFrame):
+                                    res = unmerge_and_ffill(res)
+                                elif isinstance(res, dict):
+                                    res = {k: unmerge_and_ffill(v) for k, v in res.items()}
+                            return res
+                    except Exception:
+                        pass
+        raise
+pd.read_excel = _smart_read_excel
+
+_orig_excel_file = pd.ExcelFile
+class _SmartExcelFile(_orig_excel_file):
+    def __init__(self, path_or_buffer, *args, **kwargs):
+        if isinstance(path_or_buffer, (str, Path)):
+            path_or_buffer = _smart_resolve_file(path_or_buffer)
+        super().__init__(path_or_buffer, *args, **kwargs)
+pd.ExcelFile = _SmartExcelFile
+
+_orig_sqlite_connect = sqlite3.connect
+def _smart_sqlite_connect(database, *args, **kwargs):
+    if isinstance(database, (str, Path)):
+        database = _smart_resolve_file(database)
+    return _orig_sqlite_connect(database, *args, **kwargs)
+sqlite3.connect = _smart_sqlite_connect
+
+_orig_open = open
+def _smart_open(file, *args, **kwargs):
+    if isinstance(file, (str, Path)):
+        file = _smart_resolve_file(file)
+    return _orig_open(file, *args, **kwargs)
+import builtins
+builtins.open = _smart_open
 
 _DATE_STR_PAT = _re.compile(
     r'^\\s*(?:\\d{4}-\\d{1,2}-\\d{1,2}|\\d{1,2}[/-]\\d{1,2}[/-]\\d{2,4}|\\d{1,2}\\s*(?:thg|tháng|thang)\\s*\\d{1,2}(?:\\s*(?:năm|nam|,)?\\s*\\d{4})?)(?:\\s+\\d{1,2}:\\d{2}(?::\\d{2})?)?\\s*$',
@@ -500,6 +825,8 @@ def run_python_in_sandbox(
         header = (
             "import os, sys, json, math, sqlite3, unicodedata, warnings\n"
             f"sys.path.insert(0, {PROJECT_ROOT!r})\n"
+            "from pathlib import Path\n"
+            "null = None; true = True; false = False\n"
             "import pandas as pd\n"
             "import numpy as np\n"
             "from src.postprocess.vn_utils import vn_norm, parse_vn_number, parse_vn_date\n"
@@ -511,6 +838,10 @@ def run_python_in_sandbox(
             "else:\n"
             "    pd.set_option('io.excel.xlsx.reader', 'calamine')\n"
             f"BUSINESS_DIR = {os.path.abspath(business_dir)!r}\n"
+            f"try:\n"
+            f"    os.chdir(BUSINESS_DIR)\n"
+            f"except Exception:\n"
+            f"    pass\n"
             f"CALENDAR_PATH = {calendar_path!r}\n\n"
             f"AS_OF_DATE = {as_of_date!r}\n"
             f"RULEBOOK_PATH = {rulebook_path!r}\n"
@@ -535,7 +866,7 @@ def run_python_in_sandbox(
     try:
         proc = subprocess.run(
             [sys.executable, "-B", script_path],
-            cwd=str(work_path),
+            cwd=str(os.path.abspath(business_dir)) if os.path.exists(business_dir) else str(work_path),
             env=env,
             capture_output=True,
             text=True,

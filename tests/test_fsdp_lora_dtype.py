@@ -62,7 +62,7 @@ def test_notebook_hotfix_patches_old_bundle_once(tmp_path, monkeypatch):
     script = tmp_path / 'scripts/train_sft_kaggle_2t4.py'
     script.parent.mkdir()
     script.write_text(source, encoding='utf-8')
-    notebook = json.loads((root / 'notebooks/02_train_sft_qwen7b_kaggle_2t4_890.ipynb')
+    notebook = json.loads((root / 'notebooks/Train_Qwen_kaggle.ipynb')
                           .read_text(encoding='utf-8'))
     smoke = next(''.join(c['source']) for c in notebook['cells']
                  if c['cell_type'] == 'code' and 'LAUNCH = ' in ''.join(c['source']))

@@ -11,9 +11,11 @@ Key features:
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sqlite3
+import unicodedata
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -44,6 +46,7 @@ def _quote_sql_id(identifier: str) -> str:
 
 def _detect_excel_header_candidate(
     raw_preview_df: pd.DataFrame,
+    scan_rows: int = 6,
 ) -> Tuple[int, bool, List[List[str]]]:
     """Inspect raw rows (header=None) of an Excel sheet to detect candidate header row.
 
@@ -60,7 +63,7 @@ def _detect_excel_header_candidate(
         preview_rows.append(row_vals)
 
     # Check non-empty cell counts and string counts across the first few rows
-    num_inspect = min(6, len(raw_preview_df))
+    num_inspect = min(scan_rows, len(raw_preview_df))
     row_stats = []
     for r in range(num_inspect):
         row = raw_preview_df.iloc[r]
@@ -183,12 +186,88 @@ def _extract_date_ranges(df: pd.DataFrame) -> Optional[Dict[str, str]]:
     return date_ranges or None
 
 
+MAX_EXHAUSTIVE_CARDINALITY = 20
+MAX_SAMPLE_CATEGORICAL = 5
+MAX_STRING_LEN_CATEGORICAL = 80
+MAX_SCHEMA_CHARS = 7000
+
+_EXCLUDED_VALUE_COLUMNS = {
+    "tenkhachhang", "tenkhach", "khachhang", "khach", "name",
+    "cccd", "cmnd", "sdt", "sodienthoai", "phone", "email", "diachi", "address",
+    "ghichu", "note", "description", "mota", "motachitiet", "hinhanh", "url",
+}
+
+
+def _is_excluded_value_column(column: str) -> bool:
+    folded = unicodedata.normalize("NFKD", str(column).casefold().replace("đ", "d"))
+    clean = re.sub(r"[^a-z0-9]", "", folded)
+    return clean in _EXCLUDED_VALUE_COLUMNS
+
+
+def _profile_dataframe_categoricals(
+    df: pd.DataFrame,
+    max_unique_categorical: int = MAX_EXHAUSTIVE_CARDINALITY,
+    max_sample_values: int = MAX_SAMPLE_CATEGORICAL,
+) -> Tuple[Dict[str, List[str]], Dict[str, int], List[str], bool]:
+    """Inspect full DataFrame in RAM for low-cardinality enums and high-cardinality samples."""
+    categorical_values: Dict[str, List[str]] = {}
+    column_unique_counts: Dict[str, int] = {}
+    exhaustive_columns: List[str] = []
+    truncated_categorical = False
+
+    for col in df.columns:
+        col_str = str(col)
+        if _is_excluded_value_column(col_str):
+            continue
+
+        series = df[col]
+        # Only inspect string/object/category columns, or small integer codes
+        is_obj = pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series)
+        is_small_int = pd.api.types.is_integer_dtype(series) and series.nunique(dropna=True) <= 5
+
+        if not (is_obj or is_small_int):
+            continue
+
+        non_null = series.dropna()
+        if non_null.empty:
+            continue
+
+        # Skip free-text columns with large average length
+        sample_head = non_null.head(10).astype(str)
+        if any(len(x) > MAX_STRING_LEN_CATEGORICAL for x in sample_head):
+            continue
+
+        counts: Dict[str, int] = {}
+        for val in non_null:
+            s = str(val).strip()
+            if 0 < len(s) <= MAX_STRING_LEN_CATEGORICAL:
+                counts[s] = counts.get(s, 0) + 1
+
+        if not counts:
+            continue
+
+        uniq_cnt = len(counts)
+        column_unique_counts[col_str] = uniq_cnt
+        sorted_vals = sorted(counts.keys(), key=lambda x: counts[x], reverse=True)
+
+        if uniq_cnt <= max_unique_categorical:
+            # Low cardinality: EXHAUSTIVE ENUM (100% of values, ordered by frequency)
+            categorical_values[col_str] = sorted_vals
+            exhaustive_columns.append(col_str)
+        else:
+            # High cardinality: ANNOTATED SAMPLE (top frequency values only)
+            categorical_values[col_str] = sorted_vals[:max_sample_values]
+            truncated_categorical = True
+
+    return categorical_values, column_unique_counts, exhaustive_columns, truncated_categorical
+
+
 def _extract_df_schema(
     df: pd.DataFrame,
     source_file: str,
     table_name: str,
     max_sample_rows: int = 5,
-    max_unique_categorical: int = 25,
+    max_unique_categorical: int = MAX_EXHAUSTIVE_CARDINALITY,
     candidate_header_row: Optional[int] = 0,
     header_uncertainty: bool = False,
     raw_preview: Optional[List[List[Any]]] = None,
@@ -201,21 +280,9 @@ def _extract_df_schema(
     sample_rows = sample_df.to_dict(orient="records")
     truncated_rows = row_count > max_sample_rows
 
-    categorical_values: Dict[str, List[str]] = {}
-    truncated_categorical = False
-
-    for col in df.columns:
-        if pd.api.types.is_object_dtype(df[col]) or pd.api.types.is_string_dtype(df[col]):
-            non_null = df[col].dropna()
-            uniq = non_null.astype(str).unique().tolist()
-            if any(len(str(x)) > 80 for x in uniq):
-                continue
-            if 0 < len(uniq) <= max_unique_categorical:
-                categorical_values[str(col)] = uniq
-            elif len(uniq) > max_unique_categorical:
-                categorical_values[str(col)] = uniq[:max_unique_categorical]
-                truncated_categorical = True
-
+    cat_vals, u_counts, exh_cols, trunc_cat = _profile_dataframe_categoricals(
+        df, max_unique_categorical=max_unique_categorical
+    )
     date_range = _extract_date_ranges(df)
 
     return TableSchema(
@@ -225,14 +292,42 @@ def _extract_df_schema(
         dtypes=dtypes,
         row_count=row_count,
         sample_rows=sample_rows,
-        categorical_values=categorical_values,
+        categorical_values=cat_vals,
         status="ok",
         date_range=date_range,
         candidate_header_row=candidate_header_row,
         header_uncertainty=header_uncertainty,
         raw_preview=raw_preview or [],
         truncated_rows=truncated_rows,
-        truncated_categorical=truncated_categorical,
+        truncated_categorical=trunc_cat,
+        column_unique_counts=u_counts,
+        exhaustive_columns=exh_cols,
+    )
+
+
+def _preflight_schema(
+    df: pd.DataFrame, filename: str, table: str, *,
+    columns: Optional[List[str]] = None, header: int = 0, uncertain: bool = False,
+    max_unique_categorical: int = MAX_EXHAUSTIVE_CARDINALITY,
+) -> TableSchema:
+    cat_vals, u_counts, exh_cols, trunc_cat = _profile_dataframe_categoricals(
+        df, max_unique_categorical=max_unique_categorical
+    )
+    cols = columns if columns is not None else [str(col) for col in df.columns]
+    dtypes = {str(col): str(df[col].dtype) for col in df.columns if col in df}
+    return TableSchema(
+        source_file=filename,
+        table_name=table,
+        columns=cols,
+        dtypes=dtypes,
+        row_count=None,
+        categorical_values=cat_vals,
+        status="ok",
+        candidate_header_row=header,
+        header_uncertainty=uncertain,
+        truncated_categorical=trunc_cat,
+        column_unique_counts=u_counts,
+        exhaustive_columns=exh_cols,
     )
 
 
@@ -241,8 +336,10 @@ def profile_business_package(
     business_id: str,
     max_sample_rows: int = 5,
     max_unique_categorical: int = 25,
+    *,
+    metadata_only: bool = False,
 ) -> BusinessProfile:
-    """Inspect all data files (.csv, .xlsx, .sqlite) and README.md for a business."""
+    """Inspect a business package. Metadata-only mode keeps bounded previews and no coverage stats."""
     b_path = Path(business_dir)
     if not b_path.exists():
         return BusinessProfile(
@@ -292,7 +389,8 @@ def profile_business_package(
                     df = pd.read_csv(entry, low_memory=False, encoding="utf-8-sig")
 
                 tables.append(
-                    _extract_df_schema(
+                    _preflight_schema(df, fname, entry.stem, max_unique_categorical=max_unique_categorical)
+                    if metadata_only else _extract_df_schema(
                         df,
                         source_file=fname,
                         table_name=entry.stem,
@@ -310,12 +408,14 @@ def profile_business_package(
                     try:
                         raw_preview_df = xls.parse(sheet_name, header=None, nrows=15)
                         candidate_hdr, uncertainty, preview_rows = _detect_excel_header_candidate(
-                            raw_preview_df
+                            raw_preview_df, scan_rows=15 if metadata_only else 6
                         )
 
                         df = xls.parse(sheet_name, header=candidate_hdr)
                         tables.append(
-                            _extract_df_schema(
+                            _preflight_schema(df, fname, sheet_name, header=candidate_hdr, uncertain=uncertainty,
+                                             max_unique_categorical=max_unique_categorical)
+                            if metadata_only else _extract_df_schema(
                                 df,
                                 source_file=fname,
                                 table_name=str(sheet_name),
@@ -338,6 +438,7 @@ def profile_business_package(
                                 error_message=f"Error reading sheet {sheet_name}: {sheet_exc}",
                             )
                         )
+                xls.close()
 
             elif suffix in (".sqlite", ".db", ".sqlite3"):
                 # Safe read-only SQLite inspection with doubled-quote identifiers
@@ -352,15 +453,25 @@ def profile_business_package(
                     for tname in table_names:
                         try:
                             t_quoted = _quote_sql_id(tname)
-                            # Safe row count
-                            count_cur = conn.execute(f"SELECT COUNT(*) FROM {t_quoted}")
-                            row_cnt = int(count_cur.fetchone()[0])
-
                             # Column inspection via PRAGMA
                             pragma_cur = conn.execute(f"PRAGMA table_info({t_quoted})")
                             pragma_cols = pragma_cur.fetchall()
                             cols = [row[1] for row in pragma_cols]
                             col_types = {row[1]: str(row[2]) for row in pragma_cols}
+
+                            if metadata_only:
+                                selected_cols = [c for c in cols if not _is_excluded_value_column(c)]
+                                if selected_cols:
+                                    selected = ", ".join(_quote_sql_id(col) for col in selected_cols)
+                                    sample = pd.read_sql_query(f"SELECT {selected} FROM {t_quoted}", conn)
+                                else:
+                                    sample = pd.DataFrame()
+                                tables.append(_preflight_schema(sample, fname, tname, columns=cols,
+                                                               max_unique_categorical=max_unique_categorical))
+                                continue
+
+                            count_cur = conn.execute(f"SELECT COUNT(*) FROM {t_quoted}")
+                            row_cnt = int(count_cur.fetchone()[0])
 
                             # Sample rows query
                             df_sample = pd.read_sql_query(
@@ -372,26 +483,33 @@ def profile_business_package(
                             }
                             sample_rows = df_sample.fillna("").to_dict(orient="records")
 
-                            # Categorical unique preview with truncation detection
+                            # Categorical unique preview with exact counts in RAM
                             cat_vals: Dict[str, List[str]] = {}
+                            col_unique_counts: Dict[str, int] = {}
+                            exhaustive_cols: List[str] = []
                             truncated_cat = False
 
                             if row_cnt <= 10000:
                                 for col in cols:
+                                    if _is_excluded_value_column(col):
+                                        continue
                                     c_type = col_types.get(col, "").upper()
                                     if "INT" in c_type or "REAL" in c_type or "FLOAT" in c_type:
                                         continue
                                     try:
                                         c_quoted = _quote_sql_id(col)
                                         uniq_cur = conn.execute(
-                                            f"SELECT DISTINCT {c_quoted} FROM {t_quoted} WHERE {c_quoted} IS NOT NULL LIMIT {max_unique_categorical + 1}"
+                                            f"SELECT DISTINCT {c_quoted} FROM {t_quoted} WHERE {c_quoted} IS NOT NULL"
                                         )
-                                        u_vals = [str(r[0]) for r in uniq_cur.fetchall()]
-                                        if len(u_vals) > max_unique_categorical:
+                                        u_vals = [str(r[0]) for r in uniq_cur.fetchall() if 0 < len(str(r[0]).strip()) <= MAX_STRING_LEN_CATEGORICAL]
+                                        u_cnt = len(u_vals)
+                                        col_unique_counts[col] = u_cnt
+                                        if 0 < u_cnt <= max_unique_categorical:
+                                            cat_vals[col] = u_vals
+                                            exhaustive_cols.append(col)
+                                        elif u_cnt > max_unique_categorical:
                                             cat_vals[col] = u_vals[:max_unique_categorical]
                                             truncated_cat = True
-                                        elif 0 < len(u_vals) <= max_unique_categorical:
-                                            cat_vals[col] = u_vals
                                     except Exception:
                                         pass
 
@@ -407,6 +525,8 @@ def profile_business_package(
                                     status="ok",
                                     truncated_rows=row_cnt > max_sample_rows,
                                     truncated_categorical=truncated_cat,
+                                    column_unique_counts=col_unique_counts,
+                                    exhaustive_columns=exhaustive_cols,
                                 )
                             )
                         except Exception as tbl_exc:
@@ -451,6 +571,83 @@ def profile_business_package(
         files=files_list,
         file_inventory=file_inventory,
     )
+
+
+def format_eval_schema(tables: List[TableSchema], *, include_samples: bool = True) -> str:
+    """Render real file/table identifiers without attaching README or full-table statistics."""
+    by_file: Dict[str, List[TableSchema]] = {}
+    for table in tables:
+        by_file.setdefault(table.source_file, []).append(table)
+
+    lines = ["Schema thật trong BUSINESS_DIR:"]
+    for filename, file_tables in by_file.items():
+        lines.append(f"- File: {filename!r}")
+        excel = Path(filename).suffix.lower() in {".xls", ".xlsx"}
+        groups: Dict[tuple, List[TableSchema]] = {}
+        for table in file_tables:
+            key = (tuple(table.columns), table.candidate_header_row, table.header_uncertainty,
+                   table.status, table.error_message)
+            groups.setdefault(key, []).append(table)
+        for (columns, header, uncertain, status, error), group in groups.items():
+            if len(group) > 3 and excel:
+                names = f"({len(group)} sheets cùng cấu trúc) [{group[0].table_name!r}, ..., {group[-1].table_name!r}]"
+            else:
+                names = ", ".join(repr(table.table_name) for table in group)
+            if excel:
+                lines.append(f"  Sheet: {names}")
+            elif Path(filename).suffix.lower() == ".csv":
+                lines.append(f"  Bảng CSV: {names}")
+            else:
+                lines.append(f"  Bảng: {names}")
+            if status != "ok":
+                lines.append(f"  Lỗi đọc: {error or status}")
+                continue
+            if excel:
+                lines.append(f"  header={header}" + (" (ứng viên, kiểm tra bằng nrows=0 khi cần)" if uncertain else ""))
+                if len(file_tables) == 1:
+                    lines.append(f"  pd.read_excel(os.path.join(BUSINESS_DIR, {filename!r}), "
+                                 f"sheet_name={group[0].table_name!r}, header={header})")
+            lines.append("  Cột: " + ", ".join(repr(column) for column in columns))
+            if include_samples:
+                observed: Dict[str, Dict[str, None]] = {}
+                col_u_counts: Dict[str, int] = {}
+                is_exhaustive_map: Dict[str, bool] = {}
+
+                for table in group:
+                    for column, values in table.categorical_values.items():
+                        observed.setdefault(column, {}).update(dict.fromkeys(values))
+                        col_u_counts[column] = max(col_u_counts.get(column, 0), table.column_unique_counts.get(column, len(values)))
+                        if column in table.exhaustive_columns:
+                            is_exhaustive_map[column] = True
+
+                for column, val_dict in observed.items():
+                    u_cnt = max(col_u_counts.get(column, len(val_dict)), len(val_dict))
+                    is_exh = (
+                        len(val_dict) <= max(MAX_EXHAUSTIVE_CARDINALITY, 25)
+                        and (
+                            is_exhaustive_map.get(column, False)
+                            or (u_cnt <= MAX_EXHAUSTIVE_CARDINALITY and len(val_dict) <= MAX_EXHAUSTIVE_CARDINALITY)
+                        )
+                    )
+
+                    if is_exh and len(val_dict) == u_cnt:
+                        labels = list(val_dict.keys())
+                        sample = json.dumps(labels, ensure_ascii=False)
+                        lines.append(f"  [TOÀN BỘ NHÃN / ALL LABELS (unique={u_cnt})] {column!r}: {sample}")
+                    else:
+                        samples = list(val_dict.keys())[:MAX_SAMPLE_CATEGORICAL]
+                        sample = json.dumps(samples, ensure_ascii=False)
+                        lines.append(f"  [MẪU THAM KHẢO / SAMPLE VALUES (top tần suất, unique={u_cnt})] {column!r}: {sample}")
+
+    rendered = "\n".join(lines)
+    if len(rendered) > MAX_SCHEMA_CHARS:
+        filtered_lines = [line for line in lines if "[MẪU THAM KHẢO" not in line]
+        rendered = "\n".join(filtered_lines)
+        if len(rendered) > MAX_SCHEMA_CHARS:
+            trunc_msg = "\n  ... [Cắt bớt do vượt trần token schema]"
+            budget = max(0, MAX_SCHEMA_CHARS - len(trunc_msg))
+            rendered = rendered[:budget] + trunc_msg
+    return rendered
 
 
 def format_profile_for_prompt(profile: BusinessProfile, compact: bool = False) -> str:

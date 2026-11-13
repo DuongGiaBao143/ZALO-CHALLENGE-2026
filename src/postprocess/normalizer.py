@@ -156,7 +156,15 @@ def format_answer_payload(
         if ans_type == AnswerType.STRING.value:
             if raw_answer is None or not isinstance(raw_answer, str) or str(raw_answer).strip() == "":
                 raise ValueError(f"Invalid string answer: {raw_answer!r}")
-            return AnswerType.STRING.value, unicodedata.normalize("NFC", str(raw_answer).strip())
+            s_val = unicodedata.normalize("NFC", str(raw_answer).strip())
+            # Auto-coerce ISO dates mislabeled as strings into type 'date'
+            # In DataMate evaluation rules, ISO dates are NEVER reference type 'string', always type 'date'.
+            if _ISO_DATE_RE.match(s_val) or _ISO_MONTH_RE.match(s_val):
+                try:
+                    return AnswerType.DATE.value, format_date_value(s_val)
+                except ValueError:
+                    pass
+            return AnswerType.STRING.value, s_val
 
         if ans_type == AnswerType.DATE.value:
             return AnswerType.DATE.value, format_date_value(raw_answer)
@@ -194,6 +202,9 @@ def format_answer_payload(
             rows = raw_answer.get("rows")
             if not isinstance(cols, list) or not isinstance(rows, list):
                 raise ValueError("Table 'columns' and 'rows' must be lists.")
+            # Auto-convert list of dicts to list of lists if needed
+            if rows and isinstance(rows[0], dict):
+                rows = [[r.get(c) for c in cols] for r in rows]
             num_cols = len(cols)
             cleaned_cols = [unicodedata.normalize("NFC", str(c).strip()) for c in cols]
             cleaned_rows = []

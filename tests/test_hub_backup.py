@@ -159,25 +159,33 @@ def test_error_details_keep_reason_and_http_status_but_redact_tokens(tmp_path, m
     assert 'another-token' not in details['message']
 
 
-@pytest.mark.parametrize('private', [True, False])
-def test_notebook_creates_private_repo_and_checks_existing_visibility(tmp_path, monkeypatch, private):
+@pytest.mark.parametrize('enabled', [True, False])
+def test_notebook_wires_background_backup_after_preflight(tmp_path, monkeypatch, enabled):
+    import os
     notebook = json.loads((Path(__file__).resolve().parents[1] /
-        'notebooks/02_train_sft_qwen7b_kaggle_2t4_208.ipynb').read_text(encoding='utf-8'))
+        'notebooks/Train_Qwen_kaggle.ipynb').read_text(encoding='utf-8'))
     cell = next(''.join(c['source']) for c in notebook['cells']
-                if c['cell_type']=='code' and 'api.create_repo(' in ''.join(c['source']))
+                if c['cell_type'] == 'code' and 'def run_hf_upload(' in ''.join(c['source']))
     calls = []
-    api = SimpleNamespace(whoami=lambda: {'name':'owner'},
-        create_repo=lambda **kwargs:calls.append(kwargs), repo_info=lambda *a,**kw:SimpleNamespace(private=private))
-    monkeypatch.setenv('HF_TOKEN', 'test-token-never-written-to-notebook')
-    monkeypatch.setenv('DATAMATE_HF_REPO', '')
-    monkeypatch.setenv('DATAMATE_HF_PREFIX', '')
-    monkeypatch.setenv('HF_HUB_OFFLINE', '0')
-    monkeypatch.setitem(sys.modules, 'huggingface_hub', SimpleNamespace(HfApi=lambda **kwargs:api))
-    namespace = dict(HF_REPO_NAME='Zalo-challenge', RUN_NAME='test', os=__import__('os'))
-    if private:
-        exec(compile(cell, '<hf-cell>', 'exec'), namespace)
-        assert namespace['os'].environ['DATAMATE_HF_REPO'] == 'owner/Zalo-challenge'
+
+    def run(command, env, check):
+        calls.append(command)
+        assert check and env['HF_HUB_OFFLINE'] == env['TRANSFORMERS_OFFLINE'] == '0'
+        assert env['HF_TOKEN'] == 'fixture-token'
+        report = Path(command[command.index('--report') + 1])
+        report.write_text(json.dumps(dict(status='write_verified', repo_id='Crinkk/Zalo-challenge',
+                                         url='https://huggingface.co/Crinkk/Zalo-challenge')))
+    monkeypatch.setenv('DATAMATE_HF_REPO', 'previous-repo')
+    monkeypatch.setenv('DATAMATE_HF_PREFIX', 'previous-prefix')
+    monkeypatch.setenv('HF_TOKEN', 'fixture-token')
+    namespace = dict(HF_REPO_NAME='Crinkk/Zalo-challenge' if enabled else '', RUN_NAME='test',
+                     os=os, sys=sys, json=json, RUN_ROOT=tmp_path, PROJECT=tmp_path,
+                     subprocess=SimpleNamespace(run=run), get_hf_token=lambda: 'fixture-token')
+    exec(compile(cell, '<hf-cell>', 'exec'), namespace)
+    if enabled:
+        assert os.environ['DATAMATE_HF_REPO'] == 'Crinkk/Zalo-challenge'
+        assert os.environ['DATAMATE_HF_PREFIX'].startswith('runs/test/')
+        assert len(calls) == 1
     else:
-        with pytest.raises(AssertionError, match='private'):
-            exec(compile(cell, '<hf-cell>', 'exec'), namespace)
-    assert calls == [dict(repo_id='owner/Zalo-challenge', repo_type='model', private=True, exist_ok=True)]
+        assert not calls
+        assert 'DATAMATE_HF_REPO' not in os.environ and 'DATAMATE_HF_PREFIX' not in os.environ

@@ -2,6 +2,24 @@
 from pathlib import Path
 
 
+def prepare_fsdp_qlora_model(model):
+    """Shard frozen embeddings/head separately to avoid a full-vocabulary FP32 broadcast peak."""
+    import torch
+    from peft.utils.other import fsdp_auto_wrap_policy
+    policy = fsdp_auto_wrap_policy(model)
+    vocabulary_modules = {model.get_input_embeddings(), model.get_output_embeddings()}
+    for module in vocabulary_modules:
+        if module is None or any(p.requires_grad or type(p).__name__ == 'Params4bit' for p in module.parameters()):
+            raise ValueError('Expected frozen, unquantized input embeddings and output head')
+        # Their FP16 AMP compute stays the same; keep packed NF4 storage elsewhere in FP32.
+        module.to(dtype=torch.float16)
+
+    def wrap_policy(module, recurse, nonwrapped_numel):
+        return module in vocabulary_modules or policy(module, recurse, nonwrapped_numel)
+
+    return wrap_policy
+
+
 def completion_loss_inputs(inputs):
     """Select only logits predicting supervised tokens, preserving the causal shift exactly."""
     import torch
@@ -76,9 +94,20 @@ def export_adapter(trainer, output_dir):
     """All ranks gather small adapter leaves; only rank zero writes the result."""
     state = collect_lora_state(trainer.model_wrapped, trainer.is_world_process_zero())
     if trainer.is_world_process_zero():
+        from copy import deepcopy
+        from safetensors.torch import save_file
         model = trainer.accelerator.unwrap_model(trainer.model_wrapped)
-        model.save_pretrained(output_dir, state_dict=state, safe_serialization=True,
-                              save_embedding_layers=False)
+        config = deepcopy(model.peft_config['default'])
+        if str(config.peft_type) not in ('LORA', 'PeftType.LORA') or config.bias != 'none' or config.modules_to_save:
+            raise ValueError('Leaf export supports only default LoRA with bias=none and no modules_to_save')
+        # PEFT filters supplied keys against wrapped module names, which can silently export zero tensors.
+        state = {key.replace('.lora_A.default.', '.lora_A.').replace('.lora_B.default.', '.lora_B.'): value
+                 for key, value in state.items()}
+        path = Path(output_dir)
+        path.mkdir(parents=True, exist_ok=True)
+        save_file(state, str(path / 'adapter_model.safetensors'), metadata={'format': 'pt'})
+        config.inference_mode = True
+        config.save_pretrained(path)
         trainer.processing_class.save_pretrained(output_dir)
     trainer.accelerator.wait_for_everyone()
 

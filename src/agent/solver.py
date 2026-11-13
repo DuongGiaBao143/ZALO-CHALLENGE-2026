@@ -7,19 +7,25 @@ import logging
 import os
 import re
 import time
+import unicodedata
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple
+
+import numpy as np
 
 from src.agent.prompts import (
     SYSTEM_PROMPT,
+    _mentions,
+    _search_text,
     build_error_correction_prompt,
     build_observation_prompt,
+    build_system_prompt,
     build_user_prompt,
 )
 from src.agent.sandbox import SandboxResult, extract_python_code, run_python_in_sandbox
 from src.postprocess.normalizer import format_answer_payload
-from src.profiler.business_loader import format_profile_for_prompt, profile_business_package
+from src.profiler.business_loader import format_eval_schema, format_profile_for_prompt, profile_business_package
 from src.schemas import (
     AnswerType,
     BusinessProfile,
@@ -31,6 +37,9 @@ from src.schemas import (
 from src.time_resolver.calendar_utils import load_shared_context, resolve_relative_dates
 
 logger = logging.getLogger(__name__)
+
+Conversation = List[Dict[str, str]]
+QuestionResult = Tuple[SubmissionItem, Dict[str, Any]]
 
 # Enforce offline HuggingFace environment unless explicitly configured for online mode
 if os.environ.get("HF_HUB_OFFLINE") != "0":
@@ -189,21 +198,10 @@ def _resolve_and_repair_adapter(adapter_dir: Optional[Union[str, Path]]) -> Tupl
         with safe_open(str(weights_file), framework="np") as weights:
             has_wrapper = any("_checkpoint_wrapped_module" in key for key in weights.keys())
         if has_wrapper:
-            repaired_dir = adapter_path / "repaired"
-            repaired_weights = repaired_dir / "adapter_model.safetensors"
-            repaired_config = repaired_dir / "adapter_config.json"
-            if not (repaired_weights.is_file() and repaired_config.is_file()):
-                repaired_dir.mkdir(parents=True, exist_ok=True)
-                import shutil
-                for item in adapter_path.iterdir():
-                    if item.is_file() and item.name != "adapter_model.safetensors":
-                        shutil.copy2(item, repaired_dir / item.name)
-                from safetensors.torch import load_file, save_file
-                state = load_file(str(weights_file), device="cpu")
-                clean_state = {key.replace("_checkpoint_wrapped_module.", ""): val for key, val in state.items()}
-                save_file(clean_state, str(repaired_weights))
-                logger.info("Automatically repaired adapter wrappers to: %s", repaired_dir)
-            adapter_path = repaired_dir
+            raise ValueError(
+                f"Adapter weights in {adapter_path} contain activation checkpoint wrapper "
+                "('_checkpoint_wrapped_module.'). Please repair it before initializing engine."
+            )
 
     return adapter_path, adapter_rank
 
@@ -224,7 +222,9 @@ class VLLMBackend(BaseInferenceBackend):
             raise ValueError(f"Unsupported dtype for vLLM: {dtype!r}")
 
         try:
-            from vllm import LLM, SamplingParams
+            import vllm
+            from vllm import LLM
+            SamplingParams = getattr(vllm, "SamplingParams", None)
         except ImportError as exc:
             raise ImportError(
                 "vLLM is not installed. To run with backend='vllm', install vllm>=0.7.2 "
@@ -238,12 +238,15 @@ class VLLMBackend(BaseInferenceBackend):
         logger.info("Initializing offline vLLM backend with model path: %s", model_path)
         # Low-VRAM GPUs (e.g. single T4): in-flight bitsandbytes 4-bit, LoRA still supported.
         quant_kwargs = {'quantization': 'bitsandbytes'} if model_cfg.get('load_in_4bit') else {}
+        if model_cfg.get('load_in_4bit') or model_cfg.get('max_num_batched_tokens'):
+            quant_kwargs['max_num_batched_tokens'] = int(model_cfg.get('max_num_batched_tokens', 2048))
+        self.max_model_len = int(model_cfg.get("max_model_len", 16384))
         self.llm = LLM(
             **quant_kwargs,
             model=str(model_path),
             tensor_parallel_size=int(model_cfg.get("tensor_parallel_size", 1)),
             gpu_memory_utilization=float(model_cfg.get("gpu_memory_utilization", 0.90)),
-            max_model_len=int(model_cfg.get("max_model_len", 16384)),
+            max_model_len=self.max_model_len,
             dtype=dtype,
             trust_remote_code=True,
             seed=int(model_cfg.get('seed', 42)),
@@ -253,17 +256,88 @@ class VLLMBackend(BaseInferenceBackend):
             enforce_eager=bool(model_cfg.get('enforce_eager', False)),
             max_num_seqs=int(model_cfg.get('max_num_seqs', 1)),
         )
+        self.default_max_tokens = int(model_cfg.get("max_tokens", 2048))
         self.sampling_params = SamplingParams(
             temperature=float(model_cfg.get("temperature", 0.0)),
             top_p=float(model_cfg.get("top_p", 1.0)),
             seed=int(model_cfg.get("seed", 42)),
-            max_tokens=int(model_cfg.get("max_tokens", 2048)),
+            max_tokens=self.default_max_tokens,
         )
 
+    def _fit_messages_to_context(self, messages: List[Dict[str, str]], tokenizer: Any) -> Tuple[List[Dict[str, str]], int]:
+        """Ensure multi-turn messages fit within max_model_len with room for generation."""
+        min_gen_budget = 768
+        msgs = [dict(m) for m in messages]
+        tokens = tokenizer.apply_chat_template(
+            msgs, tokenize=True, add_generation_prompt=True, return_dict=False
+        )
+        # Step 1: If multi-turn prompt exceeds budget, drop oldest intermediate turn pair (keep system/initial user + latest turn)
+        while len(tokens) > self.max_model_len - min_gen_budget and len(msgs) >= 5:
+            first_asst_idx = next((i for i, m in enumerate(msgs) if m.get("role") == "assistant"), None)
+            if first_asst_idx is not None and first_asst_idx + 2 <= len(msgs):
+                del msgs[first_asst_idx:first_asst_idx + 2]
+                tokens = tokenizer.apply_chat_template(
+                    msgs, tokenize=True, add_generation_prompt=True, return_dict=False
+                )
+            else:
+                break
+        # Step 2: If still over budget, trim oversized error/assistant messages
+        if len(tokens) > self.max_model_len - min_gen_budget and len(msgs) >= 3:
+            for idx in range(len(msgs) - 2, 0, -1):
+                if msgs[idx].get("role") == "assistant" and len(msgs[idx].get("content", "")) > 1200:
+                    msgs[idx]["content"] = msgs[idx]["content"][-1200:]
+            tokens = tokenizer.apply_chat_template(
+                msgs, tokenize=True, add_generation_prompt=True, return_dict=False
+            )
+        return msgs, len(tokens)
+
     def generate(self, messages: List[Dict[str, str]]) -> str:
-        outputs = self.llm.chat(messages=[messages], sampling_params=self.sampling_params,
+        import copy
+        tokenizer = self.llm.get_tokenizer()
+        fitted_msgs, n_toks = self._fit_messages_to_context(messages, tokenizer)
+        avail = max(256, self.max_model_len - n_toks - 16)
+        default_max = getattr(self, "default_max_tokens", 2048)
+        sp = copy.copy(self.sampling_params) if self.sampling_params is not None else None
+        if sp is not None:
+            sp.max_tokens = min(default_max, avail)
+        outputs = self.llm.chat(messages=[fitted_msgs], sampling_params=sp,
                                 lora_request=self.lora_request, use_tqdm=False)
         return outputs[0].outputs[0].text
+
+    def generate_batch(self, conversations: List[Conversation]) -> List[str | Exception]:
+        """Send valid conversations together and preserve their input positions."""
+        import copy
+        tokenizer = self.llm.get_tokenizer()
+        replies: List[str | Exception] = []
+        ready = []
+        fitted_convos: List[Conversation] = []
+        sp_list = []
+        default_max = getattr(self, "default_max_tokens", 2048)
+        for messages in conversations:
+            try:
+                fitted_msgs, n_toks = self._fit_messages_to_context(messages, tokenizer)
+                if n_toks >= self.max_model_len - 64:
+                    raise ValueError(f"Prompt has {n_toks} tokens with a {self.max_model_len}-token context")
+            except (TypeError, ValueError) as exc:
+                replies.append(exc)
+            else:
+                ready.append(len(replies))
+                replies.append("")
+                fitted_convos.append(fitted_msgs)
+                avail = max(256, self.max_model_len - n_toks - 16)
+                sp = copy.copy(self.sampling_params) if self.sampling_params is not None else None
+                if sp is not None:
+                    sp.max_tokens = min(default_max, avail)
+                sp_list.append(sp)
+
+        if ready:
+            kw = dict(lora_request=self.lora_request, use_tqdm=False)
+            if any(s is not None for s in sp_list):
+                kw["sampling_params"] = sp_list
+            outputs = self.llm.chat(messages=fitted_convos, **kw)
+            for i, output in zip(ready, outputs, strict=True):
+                replies[i] = output.outputs[0].text
+        return replies
 
 
 class TransformersBackend(BaseInferenceBackend):
@@ -288,6 +362,11 @@ class TransformersBackend(BaseInferenceBackend):
             ) from exc
 
         logger.info("Initializing offline Transformers backend with model path: %s", model_path)
+        try:
+            from src.coder_training.t4_attention import configure_t4_sdpa
+            configure_t4_sdpa()
+        except Exception as exc:
+            logger.debug("T4 SDPA configuration skipped: %s", exc)
         torch_dtype = getattr(torch, dtype_str) if hasattr(torch, dtype_str) else torch.float16
 
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -315,14 +394,21 @@ class TransformersBackend(BaseInferenceBackend):
                     formatted_max_mem[k] = v
             load_kwargs["max_memory"] = formatted_max_mem
 
-        if model_cfg.get('attn_implementation'):
-            load_kwargs['attn_implementation'] = model_cfg['attn_implementation']
+        attn_impl = model_cfg.get('attn_implementation')
+        if not attn_impl:
+            import torch
+            if hasattr(torch.nn.functional, 'scaled_dot_product_attention'):
+                attn_impl = 'sdpa'
+        if attn_impl:
+            load_kwargs['attn_implementation'] = attn_impl
+
         if model_cfg.get('load_in_4bit'):
             from transformers import BitsAndBytesConfig
             load_kwargs['quantization_config'] = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_compute_dtype=torch.float16,
                 bnb_4bit_quant_type='nf4',
+                bnb_4bit_use_double_quant=True,
             )
             load_kwargs.pop('torch_dtype', None)
         elif model_cfg.get('load_in_8bit'):
@@ -375,22 +461,89 @@ class TransformersBackend(BaseInferenceBackend):
                 self.max_tokens, generation_tokens, input_tokens_count, self.max_model_len,
             )
 
-        inputs = inputs.to(self.model.device)
-        with torch.no_grad():
-            gen_kwargs = {
-                "max_new_tokens": generation_tokens,
-                "do_sample": self.temperature > 0.0,
-                "pad_token_id": self.tokenizer.eos_token_id,
-            }
-            if self.temperature > 0.0:
-                gen_kwargs["temperature"] = self.temperature
-            if self.max_generation_time_sec is not None:
-                # Transformers checks this after a generation step; this is not a hard process timeout.
-                gen_kwargs['max_time'] = self.max_generation_time_sec
-            outputs = self.model.generate(**inputs, **gen_kwargs)
+        if self.temperature <= 0.0 and hasattr(self.model, "generation_config") and callable(self.model):
+            with torch.inference_mode():
+                generated_ids = self._greedy_chunked(inputs.input_ids, generation_tokens, prefill_chunk=512)
+            return self.tokenizer.decode(generated_ids, skip_special_tokens=True)
 
-        generated_ids = outputs[0][inputs.input_ids.shape[1] :]
-        return self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+        inputs = inputs.to(self.model.device)
+        try:
+            with torch.inference_mode():
+                gen_kwargs = {
+                    "max_new_tokens": generation_tokens,
+                    "do_sample": self.temperature > 0.0,
+                    "pad_token_id": self.tokenizer.eos_token_id,
+                }
+                if self.temperature > 0.0:
+                    gen_kwargs["temperature"] = self.temperature
+                if self.max_generation_time_sec is not None:
+                    # Transformers checks this after a generation step; this is not a hard process timeout.
+                    gen_kwargs['max_time'] = self.max_generation_time_sec
+                outputs = self.model.generate(**inputs, **gen_kwargs)
+
+            generated_ids = outputs[0][inputs.input_ids.shape[1] :]
+            return self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+        finally:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+    def _greedy_chunked(self, input_ids: Any, max_new_tokens: int, prefill_chunk: int = 512) -> List[int]:
+        """Chunked prefill + greedy decode with logits_to_keep=1 so 8k prompts never OOM on Turing T4."""
+        import gc
+        import time
+        import torch
+        from transformers import DynamicCache
+
+        model = self.model
+        device = model.device
+        ids = input_ids.to(device)
+        eos = getattr(model.generation_config, "eos_token_id", None)
+        eos_ids = set(eos if isinstance(eos, (list, tuple)) else [eos]) if eos is not None else set()
+        if self.tokenizer.eos_token_id is not None:
+            eos_ids.add(self.tokenizer.eos_token_id)
+
+        cache = DynamicCache()
+        out = None
+        generated: List[int] = []
+
+        def _forward_step(chunk_ids: Any) -> Any:
+            try:
+                return model(
+                    input_ids=chunk_ids,
+                    past_key_values=cache,
+                    use_cache=True,
+                    logits_to_keep=1,
+                )
+            except TypeError:
+                return model(
+                    input_ids=chunk_ids,
+                    past_key_values=cache,
+                    use_cache=True,
+                )
+
+        try:
+            total = int(ids.shape[1])
+            for start in range(0, total, prefill_chunk):
+                out = _forward_step(ids[:, start : start + prefill_chunk])
+                if getattr(out, "past_key_values", None) is not None:
+                    cache = out.past_key_values
+            started = time.time()
+            for _ in range(max_new_tokens):
+                next_id = int(out.logits[0, -1].argmax())
+                if next_id in eos_ids:
+                    break
+                generated.append(next_id)
+                if self.max_generation_time_sec is not None and (time.time() - started) > self.max_generation_time_sec:
+                    break
+                out = _forward_step(torch.tensor([[next_id]], device=device, dtype=ids.dtype))
+                if getattr(out, "past_key_values", None) is not None:
+                    cache = out.past_key_values
+            return generated
+        finally:
+            del out, cache, ids
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
 
 class DryRunBackend(BaseInferenceBackend):
@@ -484,6 +637,203 @@ def resolve_business_path(split_dir: Path, business_id: str) -> Path:
     return default_path
 
 
+_SCHEMA_READ_ERROR = re.compile(
+    r"KeyError:|FileNotFoundError:|Worksheet named .* not found|no such (?:table|column)|"
+    r"usecols do not match", re.IGNORECASE
+)
+
+
+def _schema_retry_hint(profile: BusinessProfile, error: str, code: str) -> str:
+    problem = error.splitlines()[-1].casefold()
+    matches = []
+    for table in profile.tables:
+        names = (Path(table.source_file).stem, table.table_name, *table.columns)
+        if (table.source_file.casefold() in problem
+                or f"{table.table_name.casefold()}.xlsx" in problem
+                or any(repr(name).casefold() in problem or json.dumps(name, ensure_ascii=False).casefold() in problem
+                       for name in names)):
+            matches.append(table)
+    if matches:
+        matches.sort(key=lambda table: table.source_file not in code)
+        return format_eval_schema(matches[:4], include_samples=False)
+    return "File có thật trong BUSINESS_DIR: " + ", ".join(repr(name) for name in profile.files[:12])
+
+
+def _eval_guard_issue(
+    question: str, answer_type: str, answer: Any, check: Any,
+    had_read_error: bool, profile: BusinessProfile,
+) -> str | None:
+    """Validate candidate final output against business rules and anti-hallucination guardrails."""
+    query = _search_text(question)
+
+    # 1. Empty Ranking / Unanswerable Guard
+    ranking = _mentions(query, "top|xếp hạng|bán chạy nhất|bán nhiều nhất|bán được nhiều nhất")
+    ranking = ranking or (re.search(r"\b[1-9][0-9]*\b", query)
+                          and _mentions(query, "cao nhất|thấp nhất|nhiều nhất|ít nhất"))
+    empty_rank = ranking and ((answer_type == "list" and answer == [])
+                              or (answer_type == "table" and isinstance(answer, dict) and answer.get("rows") == []))
+    if empty_rank or (answer_type == "unanswerable" and had_read_error):
+        valid_source = (isinstance(check, dict)
+                        and isinstance(check.get("detail"), str) and bool(check["detail"].strip())
+                        and any(table.status == "ok" and table.source_file == check.get("source_file")
+                                and table.table_name == check.get("table") for table in profile.tables))
+        if not valid_source:
+            return ("Kèm check với source_file và table đúng theo schema, và detail nêu đã kiểm tra gì "
+                    "trên nguồn đó. Lỗi đọc chưa chứng minh shop thiếu dữ liệu.")
+        if empty_rank and (type(check.get("rows_after_filter")) is not int or check["rows_after_filter"] != 0):
+            return "Kiểm tra lại kỳ và nhãn lọc; nếu xếp hạng rỗng thật, ghi check.rows_after_filter=0 từ phép lọc."
+
+    # 2. Negative Direct Count Guard
+    if answer_type == "number" and isinstance(answer, (int, float)) and answer < 0:
+        direct_count = re.search(r"\b(?:bao nhieu|may|dem(?: so)?|so luong|tong so) (?:don(?! vi\b)|hoa don)\b", query)
+        signed_metric = _mentions(query, "chênh|chênh lệch|tăng|giảm|hơn|kém|so với|trung bình|tỷ lệ|tỉ lệ|phần trăm")
+        if direct_count and not signed_metric:
+            return "Số đếm đơn trực tiếp phải không âm. Kiểm tra phép đếm mã đơn phân biệt."
+
+    # 3. Verified Zero Acceptance / Rejection Guard
+    if answer_type in ("number", "percent") and isinstance(answer, (int, float)) and answer == 0:
+        is_unsold = _mentions(query, "ế|e|ko ai mua|khong ai mua|khong ban duoc|ko ban duoc|chua ban duoc")
+        is_diff = _mentions(query, "chênh|chênh lệch|tăng|giảm|hơn|kém|so với|thay đổi")
+        is_suspicious_metric = _mentions(
+            query,
+            "doanh thu|doanh so|tong tien|tien ban|tong so tien|gia ban|gia von|loi nhuan|loi|lai|so luong ban|da ban"
+        )
+        if (is_suspicious_metric or answer_type == "percent") and not (is_unsold or is_diff):
+            has_valid_check = False
+            if isinstance(check, dict) and isinstance(check.get("detail"), str) and bool(check["detail"].strip()):
+                rows_after = check.get("rows_after_filter")
+                if isinstance(rows_after, int) and rows_after > 0:
+                    has_valid_check = True
+                elif check.get("verified_zero") is True or check.get("zero_confirmed") is True:
+                    has_valid_check = True
+                elif check.get("source_file") and any(
+                    t.source_file == check.get("source_file") for t in profile.tables
+                ):
+                    has_valid_check = True
+
+            if not has_valid_check:
+                return (
+                    "Kết quả tính ra 0 cho chỉ số doanh thu/số lượng/tiền bán chưa có bằng chứng xác minh. "
+                    "Hãy kiểm tra lại: DataFrame lọc có bị rỗng (len==0) do sai tên trạng thái "
+                    "(xem df[col].unique()), sai format ngày tháng, hoặc sai tên cột không? "
+                    "Nếu đã xác minh đúng bằng 0, hãy kèm check={'source_file':..., 'table':..., 'detail':..., 'rows_after_filter':...}. "
+                    "Nếu không có căn cứ tính hoặc dữ liệu rỗng/ngoài phạm vi, hãy trả về kind='final', type='abstain'."
+                )
+
+    # 4. Hallucination Pattern 1: [0, 0] or all-zero list
+    debt_or_flow = _mentions(
+        query,
+        "nợ|mua chịu|bán chịu|trả nợ|thu nợ|sổ quỹ|thu chi|tiền|chênh lệch|doanh thu|lợi nhuận|doanh số|dòng tiền"
+    )
+    if answer_type == "list" and isinstance(answer, list) and debt_or_flow:
+        def _is_zero_val(x: Any) -> bool:
+            if isinstance(x, (int, float, np.number)) and x == 0:
+                return True
+            s = str(x).strip()
+            if s in ("0", "0.0", "0.00", "0,0", "0,00"):
+                return True
+            try:
+                return float(s.replace(",", "")) == 0.0
+            except (ValueError, TypeError):
+                pass
+            try:
+                return float(s.replace(",", ".")) == 0.0
+            except (ValueError, TypeError):
+                return False
+
+        if len(answer) >= 2 and all(_is_zero_val(x) for x in answer):
+            return (
+                "Danh sách kết quả toàn số 0 ([0, 0] hoặc tương tự). "
+                "Hãy kiểm tra lại: Nếu tính công nợ hoặc luân chuyển tiền, không dùng cột snapshot đã trả "
+                "tại thời điểm xuất file; cần đọc sổ quỹ/phiếu thu chi theo thời gian để tính nợ phát sinh "
+                "và tiền đã trả trong kỳ. Nếu không đủ dữ kiện, hãy trả về kind='final', type='abstain'."
+            )
+
+    # 5. Hallucination Pattern 2: Zero-debt table
+    is_debt = _mentions(query, "nợ|công nợ|còn nợ|mua chịu|bán chịu|phải thu|dư nợ")
+    if answer_type == "table" and isinstance(answer, dict) and is_debt:
+        rows = answer.get("rows", [])
+        cols = [str(c).lower() for c in answer.get("columns", [])]
+        if rows:
+            def _is_positive_num(val: Any) -> bool:
+                if isinstance(val, (int, float, np.number)):
+                    return val > 0
+                if isinstance(val, str):
+                    cleaned = val.replace(",", "").strip()
+                    try:
+                        return float(cleaned) > 0
+                    except (ValueError, TypeError):
+                        pass
+                    try:
+                        return float(val.replace(".", "").replace(",", ".").strip()) > 0
+                    except (ValueError, TypeError):
+                        return False
+                return False
+
+            def _is_num_cell(val: Any) -> bool:
+                if isinstance(val, (int, float, np.number)):
+                    return True
+                if isinstance(val, str):
+                    cleaned = val.replace(",", "").strip()
+                    try:
+                        float(cleaned)
+                        return True
+                    except (ValueError, TypeError):
+                        return False
+                return False
+
+            debt_indices = [
+                i for i, c in enumerate(cols)
+                if any(k in c for k in ("nợ", "no", "tiền", "tien", "dư", "du", "phải thu", "phai thu", "amount", "due", "debt"))
+            ]
+            if not debt_indices:
+                debt_indices = [
+                    i for i in range(len(cols))
+                    if all(_is_num_cell(r[i]) for r in rows if len(r) > i)
+                ]
+            if debt_indices:
+                all_zeros = True
+                for idx in debt_indices:
+                    for r in rows:
+                        if len(r) > idx and _is_positive_num(r[idx]):
+                            all_zeros = False
+                            break
+                    if not all_zeros:
+                        break
+                if all_zeros:
+                    return (
+                        "Bảng kết quả công nợ chứa toàn số 0 hoặc số không dương. "
+                        "Theo rulebook, khách nợ phải có số dư nợ dương (> 0). Không đưa khách nợ bằng 0 vào danh sách. "
+                        "Hãy đọc sổ quỹ theo thời điểm để tính đúng số nợ còn lại, hoặc trả về kind='final', type='abstain'."
+                    )
+
+    # 6. Hallucination Pattern 3: Duplicate Top-k Ranking
+    ranking_query = _mentions(query, "top|xếp hạng|bán chạy nhất|bán nhiều nhất|bán được nhiều nhất|cao nhất|thấp nhất|sộp nhất")
+    if ranking_query:
+        if answer_type == "list" and isinstance(answer, list) and len(answer) > 1:
+            norm_items = [unicodedata.normalize("NFC", str(x).strip().casefold()) for x in answer]
+            dup_items = [x for x in set(norm_items) if norm_items.count(x) > 1]
+            if dup_items:
+                return (
+                    f"Danh sách xếp hạng top-k chứa các giá trị/mặt hàng trùng lặp: {dup_items[:3]}. "
+                    "Bạn chưa gom nhóm (groupby) theo mã hoặc tên sản phẩm/khách hàng trước khi sắp xếp và lấy top. "
+                    "Hãy dùng `.groupby(...)` để cộng tổng số lượng/doanh thu theo từng thực thể riêng biệt trước khi head(k)."
+                )
+        elif answer_type == "table" and isinstance(answer, dict):
+            rows = answer.get("rows", [])
+            if len(rows) > 1:
+                first_col = [unicodedata.normalize("NFC", str(r[0]).strip().casefold()) for r in rows if r and len(r) > 0]
+                dup_entities = [x for x in set(first_col) if first_col.count(x) > 1]
+                if dup_entities:
+                    return (
+                        f"Bảng xếp hạng top-k chứa các thực thể trùng lặp ở cột đầu: {dup_entities[:3]}. "
+                        "Bạn chưa gom nhóm (groupby) theo mã hoặc tên sản phẩm/khách hàng trước khi sắp xếp và lấy top. "
+                        "Hãy dùng `.groupby(...)` để cộng tổng theo từng thực thể riêng biệt trước khi head(k)."
+                    )
+
+    return None
+
+
 class DataMateAgent:
     """Single-model Agent (Qwen2.5-Coder-7B-Instruct) with multi-turn code execution and guardrails."""
 
@@ -498,6 +848,11 @@ class DataMateAgent:
         self.model_cfg = config.get("model", {})
         self.agent_cfg = config.get("agent", {})
         self.paths_cfg = config.get("paths", {})
+        self.eval_core_rules = bool(self.agent_cfg.get("eval_core_rules", True))
+        self.rulebook_in_system = bool(self.agent_cfg.get("rulebook_in_system", False))
+        self.use_eval_schema = bool(self.agent_cfg.get("use_eval_schema", self.eval_core_rules))
+        self.enable_guardrails = bool(self.agent_cfg.get("enable_guardrails", self.eval_core_rules))
+        self.prompt_format = str(self.agent_cfg.get("prompt_format", os.environ.get("DATAMATE_PROMPT_FORMAT", "system-user")))
 
         # Validate positive limits
         self.max_turns = int(self.agent_cfg.get("max_turns", 3))
@@ -519,6 +874,8 @@ class DataMateAgent:
         self.max_unique_categorical = int(self.agent_cfg.get("max_unique_categorical", 25))
         if self.max_unique_categorical < 0:
             raise ValueError(f"max_unique_categorical must be non-negative, got {self.max_unique_categorical}")
+
+        self.abstain_on_unanswerable = bool(self.agent_cfg.get("abstain_on_unanswerable", False))
 
         self.work_dir = str(self.paths_cfg.get("work_dir", "/tmp/datamate_work"))
 
@@ -544,24 +901,84 @@ class DataMateAgent:
                     error=str(val_err),
                 )
 
+            metadata_only = bool(self.agent_cfg.get("metadata_only", False))
             self._profile_cache[business_id] = profile_business_package(
                 business_dir=b_dir,
                 business_id=business_id,
                 max_sample_rows=self.max_sample_rows,
                 max_unique_categorical=self.max_unique_categorical,
+                metadata_only=metadata_only,
             )
         return self._profile_cache[business_id]
 
     def answer_question_with_trace(
         self, item: QuestionItem
-    ) -> Tuple[SubmissionItem, Dict[str, Any]]:
+    ) -> QuestionResult:
         """Execute multi-turn agent interaction for a QuestionItem and return (SubmissionItem, trace)."""
+        steps = self._answer_question_steps(item)
+        try:
+            prompt = next(steps)
+            while True:
+                try:
+                    reply = self.backend.generate(prompt)
+                except Exception as exc:
+                    prompt = steps.throw(exc)
+                else:
+                    prompt = steps.send(reply)
+        except StopIteration as done:
+            return done.value
+        except Exception as exc:
+            logger.error("Unhandled runtime exception on question %s: %s", item.id, exc, exc_info=True)
+            sub = SubmissionItem.abstain(item.id, reason=f"Unhandled runtime exception: {exc}")
+            trace = {
+                "id": item.id,
+                "business_id": item.business_id,
+                "question": item.question,
+                "as_of_date": item.as_of_date,
+                "final_answer": sub.to_dict(),
+                "error": str(exc),
+                "base_system_prompt": SYSTEM_PROMPT,
+                "system_prompt": SYSTEM_PROMPT,
+            }
+            return sub, trace
+
+    def answer_questions_with_trace(self, items: List[QuestionItem]) -> List[QuestionResult]:
+        """Run a bounded vLLM batch, regrouping only the questions that need another turn."""
+        if not isinstance(self.backend, VLLMBackend):
+            return [self.answer_question_with_trace(item) for item in items]
+
+        pending: List[Tuple[int, Generator[Conversation, str, QuestionResult], str | Exception | None]] = [
+            (i, self._answer_question_steps(item), None) for i, item in enumerate(items)
+        ]
+        results: Dict[int, QuestionResult] = {}
+        while pending:
+            ready = []
+            for i, steps, reply in pending:
+                try:
+                    prompt = steps.throw(reply) if isinstance(reply, Exception) else steps.send(reply)
+                except StopIteration as done:
+                    results[i] = done.value
+                except Exception as exc:
+                    item = items[i]
+                    results[i] = (SubmissionItem.abstain(item.id, reason=f"Runtime exception: {exc}"),
+                                  {"id": item.id, "error": str(exc)})
+                else:
+                    ready.append((i, steps, prompt))
+            if not ready:
+                break
+            replies = self.backend.generate_batch([prompt for _, _, prompt in ready])
+            pending = [(i, steps, reply) for (i, steps, _), reply in zip(ready, replies, strict=True)]
+        return [results[i] for i in range(len(items))]
+
+    def _answer_question_steps(self, item: QuestionItem) -> Generator[Conversation, str, QuestionResult]:
+        """Pause at model calls while retaining this question's trace and retry state."""
         t0 = time.time()
         trace: Dict[str, Any] = {
             "id": item.id,
             "business_id": item.business_id,
             "question": item.question,
             "as_of_date": item.as_of_date,
+            "base_system_prompt": SYSTEM_PROMPT,
             "system_prompt": SYSTEM_PROMPT,
             "attempts": [],
         }
@@ -578,7 +995,10 @@ class DataMateAgent:
             return sub, trace
 
         # 2. Retrieve business profile
+        cache_hit = item.business_id in self._profile_cache
+        preflight_started = time.perf_counter()
         profile = self._get_business_profile(item.business_id)
+        trace["preflight"] = {"cache_hit": cache_hit, "seconds": time.perf_counter() - preflight_started}
         if profile.error:
             logger.warning("Business profile error for %s: %s", item.id, profile.error)
             sub = SubmissionItem.abstain(item.id, reason=f"Profile error: {profile.error}")
@@ -595,43 +1015,80 @@ class DataMateAgent:
             rel_dates = {"as_of_date": item.as_of_date}
 
         calendar_path = self.shared_context.get("calendar_path", "")
-        schema_md = format_profile_for_prompt(profile, compact=True)
+        if self.use_eval_schema:
+            eval_schema = format_eval_schema(profile.tables)
+            if self.eval_core_rules:
+                schema_md = eval_schema
+            else:
+                header_lines = [
+                    "BUSINESS_DIR: biến đường dẫn do môi trường thực thi cấp; dùng trực tiếp, không gán đường dẫn tuyệt đối.",
+                    "Files: " + ", ".join(profile.files),
+                ]
+                if profile.readme_text and profile.readme_text.strip():
+                    header_lines.append("README:\n" + profile.readme_text.strip())
+                schema_md = "\n".join(header_lines) + "\n\n" + eval_schema
+        else:
+            schema_md = format_profile_for_prompt(profile, compact=True)
         rulebook_text = self.shared_context.get("rulebook_text", "")
+        system_prompt = build_system_prompt(rulebook_text) if self.rulebook_in_system else SYSTEM_PROMPT
+        trace["system_prompt"] = system_prompt
         user_prompt = build_user_prompt(
             question=item.question,
             as_of_date=item.as_of_date,
             relative_dates=rel_dates,
             schema_markdown=schema_md,
-            rulebook_text=rulebook_text,
+            rulebook_text="" if (self.eval_core_rules or self.rulebook_in_system) else rulebook_text,
             calendar_path=calendar_path,
+            core_rules=self.eval_core_rules,
+            readme_text=profile.readme_text,
+            rulebook_in_system=self.rulebook_in_system,
         )
-        trace["initial_user_prompt"] = user_prompt
-
-        messages: List[Dict[str, str]] = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ]
+        if self.prompt_format == "user-only":
+            initial_prompt = f"{system_prompt}\n\n{user_prompt}"
+            trace["initial_user_prompt"] = initial_prompt
+            trace["prompt_format"] = "user-only"
+            messages: List[Dict[str, str]] = [
+                {"role": "user", "content": initial_prompt},
+            ]
+        else:
+            trace["initial_user_prompt"] = user_prompt
+            messages: List[Dict[str, str]] = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
         trace["messages"] = [dict(m) for m in messages]
 
         code_executions_count = 0
+        had_read_error = False
 
         # Multi-turn interaction loop
         for turn in range(self.max_turns):
             turn_idx = turn + 1
             turn_start = time.time()
             prompt_snapshot = [dict(m) for m in messages]
+            if turn_idx == self.max_turns or code_executions_count + 1 >= self.max_code_executions:
+                prompt_snapshot[-1]["content"] += (
+                    "\n\nĐây là lượt cuối có thể thực thi code. Viết script in kind='final'; "
+                    "observation không còn lượt xử lý tiếp."
+                )
 
             try:
-                llm_reply = self.backend.generate(messages)
+                llm_reply = yield prompt_snapshot
             except Exception as be_exc:
                 logger.error("Inference generation error on question %s: %s", item.id, be_exc)
                 sub = SubmissionItem.abstain(item.id, reason=f"Backend generation error: {be_exc}")
                 trace["final_answer"] = sub.to_dict()
                 trace["elapsed_time_sec"] = round(time.time() - t0, 4)
                 trace["error"] = str(be_exc)
+                trace["attempts"].append({"turn": turn_idx, "prompt_messages": prompt_snapshot, "error": str(be_exc)})
                 return sub, trace
 
             code = extract_python_code(llm_reply)
+            compact_asst_reply = (
+                f"```python\n{code}\n```"
+                if code
+                else (llm_reply.split("</think>", 1)[-1].strip() if "</think>" in llm_reply else llm_reply)[-1200:]
+            )
 
             # Case A: Model did not emit any Python code block
             if not code:
@@ -648,7 +1105,7 @@ class DataMateAgent:
                 if turn == self.max_turns - 1:
                     break
 
-                messages.append({"role": "assistant", "content": llm_reply})
+                messages.append({"role": "assistant", "content": compact_asst_reply})
                 messages.append(
                     {
                         "role": "user",
@@ -691,16 +1148,22 @@ class DataMateAgent:
                 if turn == self.max_turns - 1 or code_executions_count >= self.max_code_executions:
                     break
 
-                messages.append({"role": "assistant", "content": llm_reply})
+                correction = build_error_correction_prompt(
+                    sandbox_res.error_message,
+                    sandbox_res.error_kind or "execution_error",
+                    question=item.question,
+                    as_of_date=item.as_of_date,
+                )
+                if self.enable_guardrails and _SCHEMA_READ_ERROR.search(sandbox_res.error_message or ""):
+                    had_read_error = True
+                    correction += "\n\n" + _schema_retry_hint(profile, sandbox_res.error_message, code)
+                    correction += ("\nNếu dữ liệu thật sự thiếu, kèm check với source_file, table và detail "
+                                   "nêu phép kiểm tra khi trả unanswerable.")
+                messages.append({"role": "assistant", "content": compact_asst_reply})
                 messages.append(
                     {
                         "role": "user",
-                        "content": build_error_correction_prompt(
-                            sandbox_res.error_message,
-                            sandbox_res.error_kind or "execution_error",
-                            question=item.question,
-                            as_of_date=item.as_of_date,
-                        ),
+                        "content": correction,
                     }
                 )
                 trace["messages"] = [dict(m) for m in messages]
@@ -718,7 +1181,7 @@ class DataMateAgent:
                 obs_payload = sandbox_res.parsed_output or {}
                 obs_data = obs_payload.get("data")
                 obs_msg = str(obs_payload.get("message") or "")
-                messages.append({"role": "assistant", "content": llm_reply})
+                messages.append({"role": "assistant", "content": compact_asst_reply})
                 messages.append(
                     {
                         "role": "user",
@@ -745,6 +1208,21 @@ class DataMateAgent:
                     clean_type, clean_ans = format_answer_payload(
                         raw_type, raw_ans, fallback_to_abstain=False
                     )
+
+                    # Abstain Gate: Intercept 'unanswerable' when risky to avoid -1.0 penalty.
+                    # Under competition PA metric: wrong is -1.0, abstain is 0.0.
+                    # 97.7% of reference answers are answerable, so false unanswerable is catastrophic.
+                    if clean_type == AnswerType.UNANSWERABLE.value and self.abstain_on_unanswerable:
+                        logger.info("Abstain gate intercepted 'unanswerable' on %s -> converting to safe 'abstain'", item.id)
+                        clean_type = AnswerType.ABSTAIN.value
+                        clean_ans = None
+
+                    if self.enable_guardrails:
+                        issue = _eval_guard_issue(item.question, clean_type, clean_ans,
+                                                  final_payload.get("check"), had_read_error, profile)
+                        if issue:
+                            attempt_record["guard_error"] = issue
+                            raise ValueError(issue)
                     sub = SubmissionItem(
                         id=item.id,
                         type=clean_type,
@@ -768,12 +1246,12 @@ class DataMateAgent:
                         trace["elapsed_time_sec"] = round(time.time() - t0, 4)
                         return sub, trace
 
-                    messages.append({"role": "assistant", "content": llm_reply})
+                    messages.append({"role": "assistant", "content": compact_asst_reply})
                     messages.append(
                         {
                             "role": "user",
                             "content": (
-                                f"Định dạng kết quả cuối cùng không hợp lệ: {guard_exc}\n"
+                                f"Kết quả cuối cần kiểm tra lại: {guard_exc}\n"
                                 "Hãy sửa lại cách tính hoặc định dạng đáp án theo đúng yêu cầu đề bài và in ra JSON protocol."
                             ),
                         }

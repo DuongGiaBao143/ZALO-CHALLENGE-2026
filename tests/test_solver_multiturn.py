@@ -2,14 +2,17 @@
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 import pandas as pd
 import pytest
 
 from src.agent.solver import (
     DataMateAgent,
     ScriptedBackend,
+    VLLMBackend,
     resolve_business_path,
 )
+from src.agent.sandbox import SandboxResult, validate_protocol_payload
 from src.schemas import AnswerType, QuestionItem
 
 
@@ -44,6 +47,93 @@ def synthetic_split(tmp_path):
     df.to_csv(biz_dir / "banh_mi.csv", index=False)
 
     return split_dir
+
+
+def test_vllm_batches_first_turn_and_retries_only_pending_questions(synthetic_split):
+    calls = []
+
+    def response(payload):
+        code = f"```python\nprint({json.dumps(payload)!r})\n```"
+        return SimpleNamespace(outputs=[SimpleNamespace(text=code)])
+
+    def chat(*, messages, **kwargs):
+        calls.append(messages)
+        if len(calls) == 1:
+            return [
+                response(dict(kind="final", type="number", answer=11, evidence="fixture A")),
+                response(dict(kind="observation", data={"columns": ["tien"]}, message="found")),
+            ]
+        return [response(dict(kind="final", type="number", answer=22, evidence="fixture B"))]
+
+    tokenizer = SimpleNamespace(apply_chat_template=lambda messages, **kwargs:
+                                range(100 if "too-long" in messages[1]["content"] else 20))
+    backend = VLLMBackend.__new__(VLLMBackend)
+    backend.llm = SimpleNamespace(chat=chat, get_tokenizer=lambda: tokenizer)
+    backend.max_model_len = 100
+    backend.sampling_params = backend.lora_request = None
+    agent = DataMateAgent(
+        config={"paths": {"work_dir": str(synthetic_split / "work")}},
+        data_dir=synthetic_split,
+        backend=backend,
+    )
+    items = [
+        QuestionItem(qid, "biz_001", question, "2026-08-27")
+        for qid, question in (("first", "question A"), ("long", "too-long"), ("retry", "question B"))
+    ]
+    results = agent.answer_questions_with_trace(items)
+    assert [answer.id for answer, _ in results] == ["first", "long", "retry"]
+    assert [answer.answer for answer, _ in results] == [11, None, 22]
+    assert results[1][0].type == "abstain" and "100 tokens" in results[1][1]["error"]
+    assert [len(batch) for batch in calls] == [2, 1]
+    assert "question B" in calls[1][0][1]["content"]
+    assert [attempt["kind"] for attempt in results[2][1]["attempts"]] == ["observation", "final"]
+
+
+@pytest.mark.parametrize("question,first_answer,check,expected", [
+    ("Top 3 mặt hàng bán chạy nhất?", ("list", []), {"rows_after_filter": 0}, "list"),
+    ("Top 3 mặt hàng bán chạy nhất?", ("list", []), {"rows_after_filter": False}, "abstain"),
+    ("Có bao nhiêu đơn hàng?", ("number", -1), {}, "abstain"),
+    ("Chênh lệch số đơn là bao nhiêu?", ("number", -1), {}, "number"),
+    ("Kém ca sáng bao nhiêu đơn?", ("number", -1), {}, "number"),
+    ("Còn bao nhiêu đơn vị?", ("number", -1), {}, "number"),
+])
+def test_eval_guard_checks_only_suspicious_finals(synthetic_split, monkeypatch, question, first_answer, check, expected):
+    check = {"source_file": "banh_mi.csv", "table": "banh_mi", "detail": "Đã kiểm tra lọc kỳ", **check}
+    kind, payload = validate_protocol_payload(dict(kind="final", type=first_answer[0], answer=first_answer[1],
+                                                   evidence="fixture", check=check))
+    monkeypatch.setattr("src.agent.solver.run_python_in_sandbox",
+                        lambda **kwargs: SandboxResult(success=True, kind=kind, parsed_output=payload))
+    agent = DataMateAgent({"agent": {"eval_core_rules": True, "max_turns": 1}}, synthetic_split,
+                          backend=ScriptedBackend(["```python\npass\n```"]))
+    answer, trace = agent.answer_question_with_trace(QuestionItem("q", "biz_001", question, "2026-08-27"))
+    assert answer.type == expected
+    assert ("guard_error" in trace["attempts"][0]) == (expected == "abstain")
+
+
+def test_eval_retry_after_read_error_uses_cached_schema_and_requires_check(synthetic_split, monkeypatch):
+    final = dict(kind="final", type="unanswerable", answer=None, reason="Thiếu kỳ hỏi", evidence="fixture")
+    kind, verified = validate_protocol_payload(dict(final, check={
+        "source_file": "banh_mi.csv", "table": "banh_mi", "detail": "Kỳ hỏi nằm ngoài các ngày trong nguồn",
+    }))
+    results = iter([
+        SandboxResult(success=False, kind="error", error_message="KeyError: 'tien'"),
+        SandboxResult(success=True, kind=kind, parsed_output=final),
+        SandboxResult(success=True, kind=kind, parsed_output=verified),
+        SandboxResult(success=True, kind=kind, parsed_output=final),
+    ])
+    monkeypatch.setattr("src.agent.solver.run_python_in_sandbox", lambda **kwargs: next(results))
+    agent = DataMateAgent({"agent": {"eval_core_rules": True}}, synthetic_split,
+                          backend=ScriptedBackend(["```python\npass\n```"] * 4))
+    item = QuestionItem("q", "biz_001", "Doanh thu tháng 1/2024?", "2026-08-27")
+    answer, trace = agent.answer_question_with_trace(item)
+    assert answer.type == "unanswerable" and len(trace["attempts"]) == 3
+    retry = trace["attempts"][1]["prompt_messages"][-1]["content"]
+    assert "File: 'banh_mi.csv'" in retry and "'tien'" in retry
+    assert "guard_error" in trace["attempts"][1]
+    assert trace["preflight"]["cache_hit"] is False
+    answer, trace = agent.answer_question_with_trace(item)
+    assert answer.type == "unanswerable" and len(trace["attempts"]) == 1
+    assert trace["preflight"]["cache_hit"] is True
 
 
 class TestMultiTurnSolver:

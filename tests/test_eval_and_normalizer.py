@@ -50,6 +50,13 @@ class TestNormalizer:
         t, a = format_answer_payload("string", "Cà phê sữa")
         assert t == "string" and a == "Cà phê sữa"
 
+        # String with ISO date -> coerced to date
+        t, a = format_answer_payload("string", "2026-05-09")
+        assert t == "date" and a == "2026-05-09"
+
+        t, a = format_answer_payload("string", "2025-08")
+        assert t == "date" and a == "2025-08"
+
         # Number
         t, a = format_answer_payload("number", 1000)
         assert t == "number" and a == 1000
@@ -73,6 +80,10 @@ class TestNormalizer:
         # Table
         t, a = format_answer_payload("table", {"columns": ["A", "B"], "rows": [["x", 1]]})
         assert t == "table" and a["columns"] == ["A", "B"]
+
+        # Table with list of dict rows (auto-converted to list of lists)
+        t, a = format_answer_payload("table", {"columns": ["A", "B"], "rows": [{"A": "x", "B": 1}]})
+        assert t == "table" and a["rows"] == [["x", 1]]
 
 
 class TestVnUtils:
