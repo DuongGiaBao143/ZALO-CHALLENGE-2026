@@ -1,0 +1,41 @@
+{
+  "training_performed": false,
+  "base_model": {
+    "name": "Ornith 1.5 9B",
+    "source": "https://huggingface.co/ornith-ai/Ornith-1.5-9B",
+    "ollama_tag": "ornith-1.5:9b (Q4_K_M)",
+    "license": "MIT"
+  },
+  "files": [
+    {
+      "path": "models/ollama/blobs/sha256-055501390333b9dfb77db59953edd4c1d36413ffe9376cb209c0913ea19f3e87",
+      "bytes": 117,
+      "sha256": "055501390333b9dfb77db59953edd4c1d36413ffe9376cb209c0913ea19f3e87"
+    },
+    {
+      "path": "models/ollama/blobs/sha256-852922174ee4f76621df26105333f1dfe2171cdfb60ebe5a4b013836681a8a77",
+      "bytes": 5629109056,
+      "sha256": "852922174ee4f76621df26105333f1dfe2171cdfb60ebe5a4b013836681a8a77"
+    },
+    {
+      "path": "models/ollama/blobs/sha256-2635637dd72b4d39a97331373a73366b69a0a6a14151b2a1da0a97b311e2461f",
+      "bytes": 921704448,
+      "sha256": "2635637dd72b4d39a97331373a73366b69a0a6a14151b2a1da0a97b311e2461f"
+    },
+    {
+      "path": "models/ollama/blobs/sha256-5b1ae7a9bd071e6f876a143822b865677caa747ac2cfa8e3b35ce84ee51bb520",
+      "bytes": 80,
+      "sha256": "5b1ae7a9bd071e6f876a143822b865677caa747ac2cfa8e3b35ce84ee51bb520"
+    },
+    {
+      "path": "models/ollama/manifests-v2/ollama.com/library/ornith15-datamate-pilot-8k/latest",
+      "bytes": 798,
+      "sha256": "57ad8bec8adf0a704a07a26adb2abf9edae310ba0fd3cef575d02dac1af69bb5"
+    }
+  ],
+  "datasets": {
+    "train_samples": 0,
+    "validation_samples": 0,
+    "synthetic_samples": 0
+  }
+}

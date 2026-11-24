@@ -1,0 +1,43 @@
+# =====================================================================
+# Zalo AI Challenge 2026 — DataMate Configuration
+# Model Architecture: Qwen/Qwen2.5-Coder-14B-Instruct
+# Hardware reference (Rule 7):
+#   - 2 x NVIDIA RTX 5090 (64GB total VRAM), CUDA >= 12.8
+#   - Single model <= 15B params (Rule 2: 14.7B params)
+#   - Fully offline execution (--network none, Rule 3)
+# =====================================================================
+
+model:
+  name_or_path: "Qwen/Qwen2.5-Coder-14B-Instruct"
+  local_model_dir: "/workspace/models/Qwen2.5-Coder-14B-Instruct"
+  adapter_dir: ""               # Base model zero-shot or fine-tuned adapter
+  backend: "vllm"               # Options: "vllm", "transformers", "dry_run", "scripted"
+  tensor_parallel_size: 1       # 14.7B fits in one 32GB RTX 5090 (or A100 / TP=2 for 2xT4)
+  gpu_memory_utilization: 0.90
+  max_model_len: 16384
+  dtype: "bfloat16"             # Native Ampere / Blackwell bfloat16
+
+  # Rule 8: Deterministic generation for reproducibility (|PA_uploaded - PA_rerun| <= 0.03)
+  temperature: 0.0
+  top_p: 1.0
+  seed: 42
+  max_tokens: 4096
+
+agent:
+  max_turns: 3                  # Bounded turns budget per question
+  max_code_executions: 3        # Maximum code executions per question
+  sandbox_timeout_sec: 25       # Subprocess timeout per execution
+  max_sample_rows: 5            # Number of sample rows in schema prompt per table
+  max_unique_categorical: 25    # Maximum unique values shown for categorical columns
+  eval_core_rules: false        # Use full rulebook in system prompt matching 14B SFT training
+  rulebook_in_system: true      # Include full rulebook.md in system prompt
+  use_eval_schema: true         # P1: exact categorical labels vs annotated samples + 7k char cap
+  enable_guardrails: true       # P2: zero/debt/ranking verification & retry guardrails
+  abstain_on_unanswerable: true # Abstain Gate: convert risky unanswerable to safe abstain (0 pts instead of -1 penalty)
+  prompt_format: "system-user"  # ChatML format with strict System Prompt
+
+paths:
+  data_dir: "/data"
+  output_file: "/result/submission.jsonl"
+  log_file: "/result/run.log"
+  work_dir: "/tmp/datamate_work" # Rule 5: /data is read-only; write temporary files elsewhere

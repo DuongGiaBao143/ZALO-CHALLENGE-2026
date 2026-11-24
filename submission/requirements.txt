@@ -1,0 +1,11 @@
+# Inference dependencies (the sandbox that executes model-written pandas code).
+# requirements.lock.txt inside the image records the exact versions that were installed.
+pandas>=2.2.0
+numpy>=1.26.0
+openpyxl>=3.1.2
+python-calamine>=0.2.0
+xlrd>=2.0.1
+duckdb>=1.1.0
+pyyaml>=6.0.1
+tqdm>=4.66.0
+pydantic>=2.7.0

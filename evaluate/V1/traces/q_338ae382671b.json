@@ -1,0 +1,761 @@
+{
+  "id": "q_338ae382671b",
+  "business_id": "biz_105",
+  "as_of_date": "2026-03-12",
+  "tool_mode": "eval_agent",
+  "temperature": 0.0,
+  "worker_id": 0,
+  "ollama_port": 11434,
+  "user_prompt": "Tuần trước ca chiều so với ca sáng thì doanh thu chênh bao nhiêu %?\n\nas_of_date: 2026-03-12",
+  "system_instructions": "Dữ liệu shop nằm trong `/content/ornith_opencode_train_eval_agent_20261119_100353/eval_1ep_1795082954/_shop_roots/q_338ae382671b/data`. Danh sách file dữ liệu trong shop: ['BangGia.xlsx', 'DanhMuc.xlsx', 'SoBanHang_1.xlsx', 'SoBanHang_2026.xlsx', 'SoNhapHang.xlsx', 'TonKho.xlsx'].\nQUY TRÌNH BẮT BUỘC (thực hiện ĐÚNG THỨ TỰ từng bước, KHÔNG nhảy cóc vào `run_python` khi chưa xong Bước 1 và Bước 2):\n- Bước 1 — ĐỌC THÔNG TIN SHOP & RULEBOOK TRƯỚC: Trước khi viết code hay tính toán, đọc kỹ rulebook ở trên trong system prompt để xác định định nghĩa chỉ tiêu, quy ước làm tròn, loại trừ đơn hủy/trả và kiểu `type` cần trả; đồng thời gọi tool `read` với `filePath=\"/content/ornith_opencode_train_eval_agent_20261119_100353/eval_1ep_1795082954/_shop_roots/q_338ae382671b/data/README.md\"` để nắm quy ước riêng của shop, ý nghĩa từng file và từng cột.\n- Bước 2 — XEM BẢNG & SHEET BẰNG `inspect_table`: Gọi `inspect_table(file=None, column=None)` và `inspect_table(file='<ten_file>', column=None)` cho các file liên quan để biết chính xác danh sách sheet (chọn ĐÚNG sheet khớp tháng/năm của câu hỏi, không đọc nhầm sheet khác), tên cột, và nhãn `Trạng thái` thực tế.\n- Bước 3 — XEM DỮ LIỆU Ở ĐÚNG MỐC THỜI GIAN CỦA CÂU HỎI BẰNG TOOL `explore_data` (bắt buộc với câu có ngày/tuần/tháng/quý hoặc cụm như 'hôm qua', 'tháng này'): gọi tool `explore_data(file='<ten_file>', date='<mốc>')` (không cần viết code; thêm `sheet='<ten_sheet>'` nếu file nhiều sheet). `date` nhận 'YYYY-MM-DD', 'YYYY-MM', 'dd/mm/yyyy' hoặc nguyên cụm như 'hôm qua'. Đọc `date_column`, `rows_in_window`, `status_counts_in_window`, `sample_rows`, đặc biệt `summary_rows_near_window` và `notes`: đó là dòng tổng/cộng do chủ shop ghi sẵn (ngày trống, nội dung 'Tổng ...'). TUYỆT ĐỐI không cộng chúng chung với dòng hàng, nếu không kết quả bị gấp đôi; chỉ tính trên dòng hàng thật.\n- Bước 4 — TÍNH TOÁN & CHỐT ĐÁP ÁN:\n  + Nếu chỉ cần đếm `count_distinct` trên một file CSV đơn giản: dùng `aggregate`.\n  + Với mọi câu hỏi còn lại (tra giá, lọc nhiều điều kiện, tổng/trung bình/tỷ lệ, lập bảng/danh sách, nối nhiều bảng, đọc `.xlsx`/`.sqlite`): dùng `run_python`.\nQuy tắc BẮT BUỘC khi gọi `run_python`:\n  (1) KHÔNG hardcode `/data/...`; truyền tên file tương đối cho `pd.read_excel`, `pd.read_csv`, `load_clean_df('ten_file', dedup_order=False)` (không truyền `parse_dates`), hoặc `explore_data('ten_file')`.\n  (2) Lọc ngày theo `resolve_date(expr, as_of_date=AS_OF_DATE)` + `parse_vn_date(series)` và chuẩn hóa mọi giá/tiền bằng `parse_vn_number(val)` (KHÔNG dùng `int()`/`float()` trực tiếp lên chuỗi `'37,000.0000'`); nếu rulebook loại đơn hủy/trả thì loại toàn bộ các dòng thuộc các mã đơn có trạng thái đó.\n  (3) Các helper `explore_data`, `load_clean_df`, `resolve_date`, `parse_vn_date`, `parse_vn_number`, `vn_num`, `emit_obs`, `emit_final` ĐÃ CÓ SẴN trong globals (KHÔNG import). Mọi lượt `run_python` PHẢI kết thúc bằng `emit_obs(data, msg)` khi thăm dò hoặc `emit_final(answer, type=\"number\", evidence=\"...\")` khi chốt (`type` đặt trong ngoặc kép hoặc dùng identifier `number`/`string`/`boolean`/`table`/`list`, KHÔNG gọi `emit_final()` rỗng).\n  (4) Với file XLSX nhiều sheet, mở ĐÚNG sheet khớp mốc thời gian trong câu hỏi (ví dụ ngày 01/12/2025 -> sheet `T12_2025`) và dùng `usecols` nếu file lớn.\n  (5) Chỉ chốt đáp án cuối sau khi `run_python` trả `kind=final` (hoặc `aggregate` hợp lệ). Sau khi gọi `emit_final` thành công, BẮT BUỘC phải xuất đáp án cuối cùng trong câu trả lời (trả đúng giá trị JSON của `answer` ví dụ `42`, bỏ giải thích). Nếu chưa xác minh được thì trả {\"type\":\"abstain\",\"answer\":null}.\n",
+  "rulebook_path": "/content/hf_inference_bundle/data/train/rulebook.md",
+  "rulebook_sha256": "44c3b54e9cce5671ad4b84bf43f38d0fefcb18cd8fd8ca77738370bf534cde1a",
+  "shop_root": "/content/ornith_opencode_train_eval_agent_20261119_100353/eval_1ep_1795082954/_shop_roots/q_338ae382671b/data",
+  "exit_code": 0,
+  "timed_out": false,
+  "finalization_retry_attempted": false,
+  "elapsed_sec": 109.742,
+  "finish_reason": "length",
+  "final_message_id": "msg_1f351a887001c6koaPJwi0G3Xy",
+  "tokens": {
+    "input": 38346,
+    "output": 196,
+    "reasoning": 6247,
+    "total": 44789
+  },
+  "tool_calls": [
+    {
+      "tool": "read",
+      "callID": "chatcmpl-tool-af2128cffe5c7f5b",
+      "messageID": "msg_1f350cc540012CVfvwsLrUuUge",
+      "status": "completed",
+      "input": {
+        "filePath": "/content/ornith_opencode_train_eval_agent_20261119_100353/eval_1ep_1795082954/_shop_roots/q_338ae382671b/data/README.md"
+      },
+      "output": "<path>/content/ornith_opencode_train_eval_agent_20261119_100353/eval_1ep_1795082954/_shop_roots/q_338ae382671b/data/README.md</path>\n<type>file</type>\n<content>\n1: # Dữ liệu biz_105\n2: \n3: Sổ bán hàng ghi tay chuyển sang Excel, mỗi tháng một sheet.\n4: \n5: ## File\n6: - `SoBanHang_1.xlsx` (xlsx)\n7: - `SoBanHang_2026.xlsx` (xlsx)\n8: - `DanhMuc.xlsx` (xlsx)\n9: - `TonKho.xlsx` (xlsx)\n10: - `SoNhapHang.xlsx` (xlsx)\n11: - `BangGia.xlsx` (xlsx)\n12: \n13: ## Cột trong `SoBanHang_1.xlsx`\n14: - **Hàng**: tên hàng\n15: - **so_luong**: số lượng\n16: - **Unit**: đơn vị tính\n17: - **Trị giá**: thành tiền sau giảm\n18: - **Status**: trạng thái đơn\n19: - **Giá lẻ**: đơn giá\n20: - **Giờ**: giờ đặt đơn (dòng trả hàng: lúc trả)\n21: - **Mã hóa đơn**: mã đơn\n22: - **Ngày giao dịch**: ngày bán\n23: - **Khách**: tên khách (Khách lẻ nếu không lưu)\n24: \n25: ## Cột trong `SoBanHang_2026.xlsx`\n26: - **Hàng**: tên hàng\n27: - **so_luong**: số lượng\n28: - **Unit**: đơn vị tính\n29: - **Trị giá**: thành tiền sau giảm\n30: - **Status**: trạng thái đơn\n31: - **Giá lẻ**: đơn giá\n32: - **Giờ**: giờ đặt đơn (dòng trả hàng: lúc trả)\n33: - **Mã hóa đơn**: mã đơn\n34: - **Ngày giao dịch**: ngày bán\n35: - **Khách**: tên khách (Khách lẻ nếu không lưu)\n36: \n37: ## Cột trong `DanhMuc.xlsx`\n38: - **Tên món**: tên hàng (file chỉ có mặt hàng có đơn vị lớn)\n39: - **Đơn vị gốc**: đơn vị cơ bản\n40: - **ĐV nhập**: đơn vị lớn (thùng, hộp, tấn...)\n41: - **Hệ số**: hệ số: số đơn vị cơ bản trong 1 đơn vị lớn\n42: \n43: ## Cột trong `TonKho.xlsx`\n44: - **Hàng hóa**: tên hàng\n45: - **Đơn vị tính**: đơn vị cơ bản\n46: - **Tồn cuối**: tồn kho (đơn vị cơ bản)\n47: \n48: ## Cột trong `SoNhapHang.xlsx`\n49: - **Số phiếu**: mã phiếu nhập\n50: - **Ngày nhập**: ngày nhập\n51: - **Ghi chu**: ghi chú\n52: - **Thành tiền**: tiền nhập của cả dòng\n53: - **Nhà cung cấp**: nhà cung cấp\n54: - **Tên mặt hàng**: tên hàng\n55: - **Giá nhập**: giá nhập một đơn vị (theo đơn vị nhập của dòng)\n56: - **ĐVT**: đơn vị nhập\n57: - **SL nhập**: số lượng nhập\n58: \n59: ## Cột trong `BangGia.xlsx`\n60: - **Ngày áp dụng**: ngày bắt đầu áp dụng giá\n61: - **ten_hang**: tên hàng\n62: - **Giá mới**: giá bán áp dụng từ ngày đó (đơn vị cơ bản)\n63: - **Giá cũ**: giá trước lần đổi (trống ở dòng đầu mỗi mặt hàng)\n64: \n65: ## Quy ước\n66: - Dữ liệu có đến hết 24/06/2026.\n67: - **Trả hàng**: hàng trả ghi số lượng âm, cùng mã đơn với đơn đã bán: đơn có dòng số lượng âm là đơn có trả hàng.\n68: - **Tồn kho**: **Tồn cuối** là tồn cuối ngày cuối có dữ liệu, theo đơn vị cơ bản.\n69: - **Nhập hàng**: **Giá nhập** là giá nhập một đơn vị, theo đơn vị nhập của dòng; **Thành tiền** là tiền nhập của cả dòng.\n70: - **Giá bán**: **Giá mới** (theo đơn vị cơ bản) áp dụng từ **Ngày áp dụng** đến trước lần đổi giá sau của cùng mặt hàng; dòng đầu mỗi mặt hàng là giá lúc bắt đầu dữ liệu (**Giá cũ** trống).\n71: - **Quy đổi đơn vị**: số lượng ghi theo đơn vị của dòng, hệ số quy đổi ở `DanhMuc.xlsx`.\n\n(End of file - total 71 lines)\n</content>",
+      "error": null,
+      "metadata": {
+        "preview": "# Dữ liệu biz_105\n\nSổ bán hàng ghi tay chuyển sang Excel, mỗi tháng một sheet.\n\n## File\n- `SoBanHang_1.xlsx` (xlsx)\n- `SoBanHang_2026.xlsx` (xlsx)\n- `DanhMuc.xlsx` (xlsx)\n- `TonKho.xlsx` (xlsx)\n- `SoNhapHang.xlsx` (xlsx)\n- `BangGia.xlsx` (xlsx)\n\n## Cột trong `SoBanHang_1.xlsx`\n- **Hàng**: tên hàng\n- **so_luong**: số lượng\n- **Unit**: đơn vị tính\n- **Trị giá**: thành tiền sau giảm\n- **Status**: trạng thái đơn\n- **Giá lẻ**: đơn giá\n- **Giờ**: giờ đặt đơn (dòng trả hàng: lúc trả)",
+        "truncated": false,
+        "loaded": [],
+        "display": {
+          "type": "file",
+          "path": "/content/ornith_opencode_train_eval_agent_20261119_100353/eval_1ep_1795082954/_shop_roots/q_338ae382671b/data/README.md",
+          "text": "# Dữ liệu biz_105\n\nSổ bán hàng ghi tay chuyển sang Excel, mỗi tháng một sheet.\n\n## File\n- `SoBanHang_1.xlsx` (xlsx)\n- `SoBanHang_2026.xlsx` (xlsx)\n- `DanhMuc.xlsx` (xlsx)\n- `TonKho.xlsx` (xlsx)\n- `SoNhapHang.xlsx` (xlsx)\n- `BangGia.xlsx` (xlsx)\n\n## Cột trong `SoBanHang_1.xlsx`\n- **Hàng**: tên hàng\n- **so_luong**: số lượng\n- **Unit**: đơn vị tính\n- **Trị giá**: thành tiền sau giảm\n- **Status**: trạng thái đơn\n- **Giá lẻ**: đơn giá\n- **Giờ**: giờ đặt đơn (dòng trả hàng: lúc trả)\n- **Mã hóa đơn**: mã đơn\n- **Ngày giao dịch**: ngày bán\n- **Khách**: tên khách (Khách lẻ nếu không lưu)\n\n## Cột trong `SoBanHang_2026.xlsx`\n- **Hàng**: tên hàng\n- **so_luong**: số lượng\n- **Unit**: đơn vị tính\n- **Trị giá**: thành tiền sau giảm\n- **Status**: trạng thái đơn\n- **Giá lẻ**: đơn giá\n- **Giờ**: giờ đặt đơn (dòng trả hàng: lúc trả)\n- **Mã hóa đơn**: mã đơn\n- **Ngày giao dịch**: ngày bán\n- **Khách**: tên khách (Khách lẻ nếu không lưu)\n\n## Cột trong `DanhMuc.xlsx`\n- **Tên món**: tên hàng (file chỉ có mặt hàng có đơn vị lớn)\n- **Đơn vị gốc**: đơn vị cơ bản\n- **ĐV nhập**: đơn vị lớn (thùng, hộp, tấn...)\n- **Hệ số**: hệ số: số đơn vị cơ bản trong 1 đơn vị lớn\n\n## Cột trong `TonKho.xlsx`\n- **Hàng hóa**: tên hàng\n- **Đơn vị tính**: đơn vị cơ bản\n- **Tồn cuối**: tồn kho (đơn vị cơ bản)\n\n## Cột trong `SoNhapHang.xlsx`\n- **Số phiếu**: mã phiếu nhập\n- **Ngày nhập**: ngày nhập\n- **Ghi chu**: ghi chú\n- **Thành tiền**: tiền nhập của cả dòng\n- **Nhà cung cấp**: nhà cung cấp\n- **Tên mặt hàng**: tên hàng\n- **Giá nhập**: giá nhập một đơn vị (theo đơn vị nhập của dòng)\n- **ĐVT**: đơn vị nhập\n- **SL nhập**: số lượng nhập\n\n## Cột trong `BangGia.xlsx`\n- **Ngày áp dụng**: ngày bắt đầu áp dụng giá\n- **ten_hang**: tên hàng\n- **Giá mới**: giá bán áp dụng từ ngày đó (đơn vị cơ bản)\n- **Giá cũ**: giá trước lần đổi (trống ở dòng đầu mỗi mặt hàng)\n\n## Quy ước\n- Dữ liệu có đến hết 24/06/2026.\n- **Trả hàng**: hàng trả ghi số lượng âm, cùng mã đơn với đơn đã bán: đơn có dòng số lượng âm là đơn có trả hàng.\n- **Tồn kho**: **Tồn cuối** là tồn cuối ngày cuối có dữ liệu, theo đơn vị cơ bản.\n- **Nhập hàng**: **Giá nhập** là giá nhập một đơn vị, theo đơn vị nhập của dòng; **Thành tiền** là tiền nhập của cả dòng.\n- **Giá bán**: **Giá mới** (theo đơn vị cơ bản) áp dụng từ **Ngày áp dụng** đến trước lần đổi giá sau của cùng mặt hàng; dòng đầu mỗi mặt hàng là giá lúc bắt đầu dữ liệu (**Giá cũ** trống).\n- **Quy đổi đơn vị**: số lượng ghi theo đơn vị của dòng, hệ số quy đổi ở `DanhMuc.xlsx`.",
+          "lineStart": 1,
+          "lineEnd": 71,
+          "totalLines": 71,
+          "truncated": false
+        }
+      },
+      "time": {
+        "start": 1795083550858,
+        "end": 1795083550877
+      }
+    },
+    {
+      "tool": "inspect_table",
+      "callID": "chatcmpl-tool-8db4cbcb60194ba1",
+      "messageID": "msg_1f35140c4001emUX8ibAZnfhQz",
+      "status": "completed",
+      "input": {
+        "file": "SoBanHang_2026.xlsx"
+      },
+      "output": "{\"file\": \"SoBanHang_2026.xlsx\", \"type\": \"xlsx\", \"sheets\": [\"Thang 02 2026\", \"Thang 03 2026\", \"Thang 04 2026\", \"Thang 05 2026\", \"Thang 06 2026\"], \"sheets_preview\": {\"Thang 02 2026\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"columns\": [\"Hàng\", \"so_luong\", \"Unit\", \"Trị giá\", \"Status\", \"Giá lẻ\", \"Giờ\", \"Mã hóa đơn\", \"Ngày giao dịch\", \"Khách\"], \"first_rows\": [[\"Hàng\", \"\", \"\", \"Tiền\", \"\", \"\", \"Đơn\"], [\"Hàng\", \"so_luong\", \"Unit\", \"Trị giá\", \"Status\", \"Giá lẻ\", \"Giờ\", \"Mã hóa đơn\", \"Ngày giao dịch\", \"Khách\"], [\"Cappuccino (L)\", \"-1\", \"ly\", \"-53.500đ\", \"Đổi trả\", \"53.500đ\", \"2026-02-01 08:47:28\", \"ORD059865\", \"01/02/2026\", \"Đinh Tâm Khoa\"], [\"Trà chanh (M)\", \"3\", \"ly\", \"75.000đ\", \"đã xong\", \"25.000đ\", \"2026-02-01 06:04:33\", \"ORD060804\", \"46054\", \"Khách lẻ\"]], \"sample_rows\": [[\"Cappuccino (L)\", \"-1\", \"ly\", \"-53.500đ\", \"Đổi trả\", \"53.500đ\", \"2026-02-01 08:47:28\", \"ORD059865\", \"01/02/2026\", \"Đinh Tâm Khoa\"], [\"Trà chanh (M)\", \"3\", \"ly\", \"75.000đ\", \"đã xong\", \"25.000đ\", \"2026-02-01 06:04:33\", \"ORD060804\", \"46054\", \"Khách lẻ\"]]}, \"Thang 03 2026\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"columns\": [\"Hàng\", \"so_luong\", \"Unit\", \"Trị giá\", \"Status\", \"Giá lẻ\", \"Giờ\", \"Mã hóa đơn\", \"Ngày giao dịch\", \"Khách\"], \"first_rows\": [[\"Hàng\", \"\", \"\", \"Tiền\", \"\", \"\", \"Đơn\"], [\"Hàng\", \"so_luong\", \"Unit\", \"Trị giá\", \"Status\", \"Giá lẻ\", \"Giờ\", \"Mã hóa đơn\", \"Ngày giao dịch\", \"Khách\"], [\"Hồng trà sữa (M)\", \"-1\", \"ly\", \"-39.000đ\", \"Trả hàng\", \"39k\", \"2026-03-01 19:10:13\", \"ORD063794\", \"46082\", \"Khách lẻ\"], [\"Topping Pudding trứng\", \"1\", \"phần\", \"10.500đ\", \"đã lấy\", \"10.500đ\", \"2026-03-01 06:03:00\", \"ORD064652\", \"46082\", \"Trương Thảo Thảo\"]], \"sample_rows\": [[\"Hồng trà sữa (M)\", \"-1\", \"ly\", \"-39.000đ\", \"Trả hàng\", \"39k\", \"2026-03-01 19:10:13\", \"ORD063794\", \"46082\", \"Khách lẻ\"], [\"Topping Pudding trứng\", \"1\", \"phần\", \"10.500đ\", \"đã lấy\", \"10.500đ\", \"2026-03-01 06:03:00\", \"ORD064652\", \"46082\", \"Trương Thảo Thảo\"]]}, \"Thang 04 2026\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"same_columns_as\": \"Thang 03 2026\", \"sample_rows\": [[\"Hồng trà sữa (L)\", \"-1\", \"ly\", \"-45.000đ\", \"hàng trả về\", \"45k\", \"2026-04-01 15:00:37\", \"ORD070246\", \"01/04/2026\", \"Đặng Đạt Trang\"]]}, \"Thang 05 2026\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"same_columns_as\": \"Thang 03 2026\", \"sample_rows\": [[\"Cà phê sữa (M)\", \"1\", \"ly\", \"30.500đ\", \"đã xong\", \"30.500đ\", \"2026-05-01 06:07:33\", \"ORD075794\", \"46143\", \"Tạ Minh Minh\"]]}, \"Thang 06 2026\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"same_columns_as\": \"Thang 03 2026\", \"sample_rows\": [[\"Trà đào cam sả (L)\", \"-1\", \"ly\", \"-45k\", \"Trả hàng\", \"45.000đ\", \"2026-06-01 10:50:42\", \"ORD080911\", \"01/06/2026\", \"Khách lẻ\"]]}}, \"hint\": \"Use load_clean_df(file, sheet=..., dedup_order=False) or pd.read_excel(file, sheet_name=...) — headers are auto-detected.\"}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1795083570078,
+        "end": 1795083570082
+      },
+      "full_result": {
+        "file": "SoBanHang_2026.xlsx",
+        "type": "xlsx",
+        "sheets": [
+          "Thang 02 2026",
+          "Thang 03 2026",
+          "Thang 04 2026",
+          "Thang 05 2026",
+          "Thang 06 2026"
+        ],
+        "sheets_preview": {
+          "Thang 02 2026": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "columns": [
+              "Hàng",
+              "so_luong",
+              "Unit",
+              "Trị giá",
+              "Status",
+              "Giá lẻ",
+              "Giờ",
+              "Mã hóa đơn",
+              "Ngày giao dịch",
+              "Khách"
+            ],
+            "first_rows": [
+              [
+                "Hàng",
+                "",
+                "",
+                "Tiền",
+                "",
+                "",
+                "Đơn"
+              ],
+              [
+                "Hàng",
+                "so_luong",
+                "Unit",
+                "Trị giá",
+                "Status",
+                "Giá lẻ",
+                "Giờ",
+                "Mã hóa đơn",
+                "Ngày giao dịch",
+                "Khách"
+              ],
+              [
+                "Cappuccino (L)",
+                "-1",
+                "ly",
+                "-53.500đ",
+                "Đổi trả",
+                "53.500đ",
+                "2026-02-01 08:47:28",
+                "ORD059865",
+                "01/02/2026",
+                "Đinh Tâm Khoa"
+              ],
+              [
+                "Trà chanh (M)",
+                "3",
+                "ly",
+                "75.000đ",
+                "đã xong",
+                "25.000đ",
+                "2026-02-01 06:04:33",
+                "ORD060804",
+                "46054",
+                "Khách lẻ"
+              ]
+            ],
+            "sample_rows": [
+              [
+                "Cappuccino (L)",
+                "-1",
+                "ly",
+                "-53.500đ",
+                "Đổi trả",
+                "53.500đ",
+                "2026-02-01 08:47:28",
+                "ORD059865",
+                "01/02/2026",
+                "Đinh Tâm Khoa"
+              ],
+              [
+                "Trà chanh (M)",
+                "3",
+                "ly",
+                "75.000đ",
+                "đã xong",
+                "25.000đ",
+                "2026-02-01 06:04:33",
+                "ORD060804",
+                "46054",
+                "Khách lẻ"
+              ]
+            ]
+          },
+          "Thang 03 2026": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "columns": [
+              "Hàng",
+              "so_luong",
+              "Unit",
+              "Trị giá",
+              "Status",
+              "Giá lẻ",
+              "Giờ",
+              "Mã hóa đơn",
+              "Ngày giao dịch",
+              "Khách"
+            ],
+            "first_rows": [
+              [
+                "Hàng",
+                "",
+                "",
+                "Tiền",
+                "",
+                "",
+                "Đơn"
+              ],
+              [
+                "Hàng",
+                "so_luong",
+                "Unit",
+                "Trị giá",
+                "Status",
+                "Giá lẻ",
+                "Giờ",
+                "Mã hóa đơn",
+                "Ngày giao dịch",
+                "Khách"
+              ],
+              [
+                "Hồng trà sữa (M)",
+                "-1",
+                "ly",
+                "-39.000đ",
+                "Trả hàng",
+                "39k",
+                "2026-03-01 19:10:13",
+                "ORD063794",
+                "46082",
+                "Khách lẻ"
+              ],
+              [
+                "Topping Pudding trứng",
+                "1",
+                "phần",
+                "10.500đ",
+                "đã lấy",
+                "10.500đ",
+                "2026-03-01 06:03:00",
+                "ORD064652",
+                "46082",
+                "Trương Thảo Thảo"
+              ]
+            ],
+            "sample_rows": [
+              [
+                "Hồng trà sữa (M)",
+                "-1",
+                "ly",
+                "-39.000đ",
+                "Trả hàng",
+                "39k",
+                "2026-03-01 19:10:13",
+                "ORD063794",
+                "46082",
+                "Khách lẻ"
+              ],
+              [
+                "Topping Pudding trứng",
+                "1",
+                "phần",
+                "10.500đ",
+                "đã lấy",
+                "10.500đ",
+                "2026-03-01 06:03:00",
+                "ORD064652",
+                "46082",
+                "Trương Thảo Thảo"
+              ]
+            ]
+          },
+          "Thang 04 2026": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "same_columns_as": "Thang 03 2026",
+            "sample_rows": [
+              [
+                "Hồng trà sữa (L)",
+                "-1",
+                "ly",
+                "-45.000đ",
+                "hàng trả về",
+                "45k",
+                "2026-04-01 15:00:37",
+                "ORD070246",
+                "01/04/2026",
+                "Đặng Đạt Trang"
+              ]
+            ]
+          },
+          "Thang 05 2026": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "same_columns_as": "Thang 03 2026",
+            "sample_rows": [
+              [
+                "Cà phê sữa (M)",
+                "1",
+                "ly",
+                "30.500đ",
+                "đã xong",
+                "30.500đ",
+                "2026-05-01 06:07:33",
+                "ORD075794",
+                "46143",
+                "Tạ Minh Minh"
+              ]
+            ]
+          },
+          "Thang 06 2026": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "same_columns_as": "Thang 03 2026",
+            "sample_rows": [
+              [
+                "Trà đào cam sả (L)",
+                "-1",
+                "ly",
+                "-45k",
+                "Trả hàng",
+                "45.000đ",
+                "2026-06-01 10:50:42",
+                "ORD080911",
+                "01/06/2026",
+                "Khách lẻ"
+              ]
+            ]
+          }
+        },
+        "hint": "Use load_clean_df(file, sheet=..., dedup_order=False) or pd.read_excel(file, sheet_name=...) — headers are auto-detected."
+      }
+    },
+    {
+      "tool": "inspect_table",
+      "callID": "chatcmpl-tool-afcba124e2e02f23",
+      "messageID": "msg_1f35140c4001emUX8ibAZnfhQz",
+      "status": "completed",
+      "input": {
+        "file": "SoBanHang_1.xlsx"
+      },
+      "output": "{\"file\": \"SoBanHang_1.xlsx\", \"type\": \"xlsx\", \"sheets\": [\"Thang 02 2025\", \"Thang 03 2025\", \"Thang 04 2025\", \"Thang 05 2025\", \"Thang 06 2025\", \"Thang 07 2025\", \"Thang 08 2025\", \"Thang 09 2025\", \"Thang 10 2025\", \"Thang 11 2025\", \"Thang 12 2025\", \"Thang 01 2026\"], \"sheets_preview\": {\"Thang 02 2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"columns\": [\"Hàng\", \"so_luong\", \"Unit\", \"Trị giá\", \"Status\", \"Giá lẻ\", \"Giờ\", \"Mã hóa đơn\", \"Ngày giao dịch\", \"Khách\"], \"first_rows\": [[\"Hàng\", \"\", \"\", \"Tiền\", \"\", \"\", \"Đơn\"], [\"Hàng\", \"so_luong\", \"Unit\", \"Trị giá\", \"Status\", \"Giá lẻ\", \"Giờ\", \"Mã hóa đơn\", \"Ngày giao dịch\", \"Khách\"], [\"Đá xay cookie (M)\", \"1\", \"ly\", \"55.000đ\", \"đã lấy\", \"55.000đ\", \"2025-02-01 06:00:25\", \"ORD000001\", \"01/02/2025\", \"Vương Sơn Thảo\"], [\"Cà phê đen (M)\", \"1\", \"ly\", \"25.000đ\", \"đã lấy\", \"25k\", \"2025-02-01 06:00:25\", \"ORD000001\", \"45689\", \"Vương Sơn Thảo\"]], \"sample_rows\": [[\"Đá xay cookie (M)\", \"1\", \"ly\", \"55.000đ\", \"đã lấy\", \"55.000đ\", \"2025-02-01 06:00:25\", \"ORD000001\", \"01/02/2025\", \"Vương Sơn Thảo\"], [\"Cà phê đen (M)\", \"1\", \"ly\", \"25.000đ\", \"đã lấy\", \"25k\", \"2025-02-01 06:00:25\", \"ORD000001\", \"45689\", \"Vương Sơn Thảo\"]]}, \"Thang 03 2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"columns\": [\"Hàng\", \"so_luong\", \"Unit\", \"Trị giá\", \"Status\", \"Giá lẻ\", \"Giờ\", \"Mã hóa đơn\", \"Ngày giao dịch\", \"Khách\"], \"first_rows\": [[\"Hàng\", \"\", \"\", \"Tiền\", \"\", \"\", \"Đơn\"], [\"Hàng\", \"so_luong\", \"Unit\", \"Trị giá\", \"Status\", \"Giá lẻ\", \"Giờ\", \"Mã hóa đơn\", \"Ngày giao dịch\", \"Khách\"], [\"Espresso (single)\", \"1\", \"ly\", \"35.000đ\", \"đã lấy\", \"35.000đ\", \"2025-03-01 06:01:04\", \"ORD003982\", \"45717\", \"Đàm Hoa Dũng\"], [\"Espresso (single)\", \"1\", \"ly\", \"35.000đ\", \"đã xong\", \"35.000đ\", \"2025-03-01 06:03:07\", \"ORD003983\", \"45717\", \"Dương Thảo Hải\"]], \"sample_rows\": [[\"Espresso (single)\", \"1\", \"ly\", \"35.000đ\", \"đã lấy\", \"35.000đ\", \"2025-03-01 06:01:04\", \"ORD003982\", \"45717\", \"Đàm Hoa Dũng\"], [\"Espresso (single)\", \"1\", \"ly\", \"35.000đ\", \"đã xong\", \"35.000đ\", \"2025-03-01 06:03:07\", \"ORD003983\", \"45717\", \"Dương Thảo Hải\"]]}, \"Thang 04 2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"same_columns_as\": \"Thang 03 2025\", \"sample_rows\": [[\"Bạc xỉu (L)\", \"1\", \"ly\", \"38.000đ\", \"đã xong\", \"38.000đ\", \"2025-04-01 06:06:05\", \"ORD008975\", \"01/04/2025\", \"Khách lẻ\"]]}, \"Thang 05 2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"same_columns_as\": \"Thang 03 2025\", \"sample_rows\": [[\"Matcha latte (M)\", \"1\", \"ly\", \"49k\", \"đã xong\", \"49.000đ\", \"2025-05-01 06:03:16\", \"ORD013732\", \"01/05/2025\", \"Đoàn Hạnh Hoàng\"]]}, \"Thang 06 2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"same_columns_as\": \"Thang 03 2025\", \"sample_rows\": [[\"Sinh tố bơ (M)\", \"-1\", \"ly\", \"-45k\", \"Đổi trả\", \"45.000đ\", \"2025-06-01 16:09:26\", \"ORD018046\", \"45809\", \"Khách lẻ\"]]}, \"Thang 07 2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"same_columns_as\": \"Thang 03 2025\", \"sample_rows\": [[\"Cà phê sữa (M)\", \"-1\", \"ly\", \"-30.500đ\", \"hàng trả về\", \"30.500đ\", \"2025-07-01 10:05:37\", \"ORD023162\", \"01/07/2025\", \"Khách lẻ\"]]}, \"Thang 08 2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"same_columns_as\": \"Thang 03 2025\", \"sample_rows\": [[\"Cà phê đen (L)\", \"1\", \"ly\", \"31k\", \"đã xong\", \"31.000đ\", \"2025-08-01 06:05:00\", \"ORD028751\", \"01/08/2025\", \"Khách lẻ\"]]}, \"Thang 09 2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"same_columns_as\": \"Thang 03 2025\", \"sample_rows\": [[\"Cà phê đen (L)\", \"1\", \"ly\", \"31.000đ\", \"đã lấy\", \"31.000đ\", \"2025-09-01 06:11:34\", \"ORD034075\", \"45901\", \"Khách lẻ\"]]}, \"Thang 10 2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"same_columns_as\": \"Thang 03 2025\", \"sample_rows\": [[\"Cà phê sữa (M)\", \"-1\", \"ly\", \"-30.500đ\", \"Trả hàng\", \"30.500đ\", \"2025-10-01 14:10:46\", \"ORD038783\", \"01/10/2025\", \"Khách lẻ\"]]}, \"Thang 11 2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"same_columns_as\": \"Thang 03 2025\", \"sample_rows\": [[\"Trà chanh (M)\", \"1\", \"ly\", \"25.000đ\", \"đã xong\", \"25.000đ\", \"2025-11-01 06:01:54\", \"ORD044583\", \"45962\", \"Lương Quân Thắng\"]]}, \"Thang 12 2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"same_columns_as\": \"Thang 03 2025\", \"sample_rows\": [[\"Hồng trà sữa (M)\", \"2\", \"ly\", \"78.000đ\", \"đã lấy\", \"39.000đ\", \"2025-12-01 06:05:06\", \"ORD049804\", \"01/12/2025\", \"Khách lẻ\"]]}, \"Thang 01 2026\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 1, \"same_columns_as\": \"Thang 03 2025\", \"sample_rows\": [[\"Cà phê sữa (M)\", \"-1\", \"ly\", \"-30.500đ\", \"hàng trả về\", \"30.500đ\", \"2026-01-01 14:58:08\", \"ORD054396\", \"46023\", \"Tăng Đức Giang\"]]}}, \"hint\": \"Use load_clean_df(file, sheet=..., dedup_order=False) or pd.read_excel(file, sheet_name=...) — headers are auto-detected.\"}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1795083577454,
+        "end": 1795083577460
+      },
+      "full_result": {
+        "file": "SoBanHang_1.xlsx",
+        "type": "xlsx",
+        "sheets": [
+          "Thang 02 2025",
+          "Thang 03 2025",
+          "Thang 04 2025",
+          "Thang 05 2025",
+          "Thang 06 2025",
+          "Thang 07 2025",
+          "Thang 08 2025",
+          "Thang 09 2025",
+          "Thang 10 2025",
+          "Thang 11 2025",
+          "Thang 12 2025",
+          "Thang 01 2026"
+        ],
+        "sheets_preview": {
+          "Thang 02 2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "columns": [
+              "Hàng",
+              "so_luong",
+              "Unit",
+              "Trị giá",
+              "Status",
+              "Giá lẻ",
+              "Giờ",
+              "Mã hóa đơn",
+              "Ngày giao dịch",
+              "Khách"
+            ],
+            "first_rows": [
+              [
+                "Hàng",
+                "",
+                "",
+                "Tiền",
+                "",
+                "",
+                "Đơn"
+              ],
+              [
+                "Hàng",
+                "so_luong",
+                "Unit",
+                "Trị giá",
+                "Status",
+                "Giá lẻ",
+                "Giờ",
+                "Mã hóa đơn",
+                "Ngày giao dịch",
+                "Khách"
+              ],
+              [
+                "Đá xay cookie (M)",
+                "1",
+                "ly",
+                "55.000đ",
+                "đã lấy",
+                "55.000đ",
+                "2025-02-01 06:00:25",
+                "ORD000001",
+                "01/02/2025",
+                "Vương Sơn Thảo"
+              ],
+              [
+                "Cà phê đen (M)",
+                "1",
+                "ly",
+                "25.000đ",
+                "đã lấy",
+                "25k",
+                "2025-02-01 06:00:25",
+                "ORD000001",
+                "45689",
+                "Vương Sơn Thảo"
+              ]
+            ],
+            "sample_rows": [
+              [
+                "Đá xay cookie (M)",
+                "1",
+                "ly",
+                "55.000đ",
+                "đã lấy",
+                "55.000đ",
+                "2025-02-01 06:00:25",
+                "ORD000001",
+                "01/02/2025",
+                "Vương Sơn Thảo"
+              ],
+              [
+                "Cà phê đen (M)",
+                "1",
+                "ly",
+                "25.000đ",
+                "đã lấy",
+                "25k",
+                "2025-02-01 06:00:25",
+                "ORD000001",
+                "45689",
+                "Vương Sơn Thảo"
+              ]
+            ]
+          },
+          "Thang 03 2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "columns": [
+              "Hàng",
+              "so_luong",
+              "Unit",
+              "Trị giá",
+              "Status",
+              "Giá lẻ",
+              "Giờ",
+              "Mã hóa đơn",
+              "Ngày giao dịch",
+              "Khách"
+            ],
+            "first_rows": [
+              [
+                "Hàng",
+                "",
+                "",
+                "Tiền",
+                "",
+                "",
+                "Đơn"
+              ],
+              [
+                "Hàng",
+                "so_luong",
+                "Unit",
+                "Trị giá",
+                "Status",
+                "Giá lẻ",
+                "Giờ",
+                "Mã hóa đơn",
+                "Ngày giao dịch",
+                "Khách"
+              ],
+              [
+                "Espresso (single)",
+                "1",
+                "ly",
+                "35.000đ",
+                "đã lấy",
+                "35.000đ",
+                "2025-03-01 06:01:04",
+                "ORD003982",
+                "45717",
+                "Đàm Hoa Dũng"
+              ],
+              [
+                "Espresso (single)",
+                "1",
+                "ly",
+                "35.000đ",
+                "đã xong",
+                "35.000đ",
+                "2025-03-01 06:03:07",
+                "ORD003983",
+                "45717",
+                "Dương Thảo Hải"
+              ]
+            ],
+            "sample_rows": [
+              [
+                "Espresso (single)",
+                "1",
+                "ly",
+                "35.000đ",
+                "đã lấy",
+                "35.000đ",
+                "2025-03-01 06:01:04",
+                "ORD003982",
+                "45717",
+                "Đàm Hoa Dũng"
+              ],
+              [
+                "Espresso (single)",
+                "1",
+                "ly",
+                "35.000đ",
+                "đã xong",
+                "35.000đ",
+                "2025-03-01 06:03:07",
+                "ORD003983",
+                "45717",
+                "Dương Thảo Hải"
+              ]
+            ]
+          },
+          "Thang 04 2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "same_columns_as": "Thang 03 2025",
+            "sample_rows": [
+              [
+                "Bạc xỉu (L)",
+                "1",
+                "ly",
+                "38.000đ",
+                "đã xong",
+                "38.000đ",
+                "2025-04-01 06:06:05",
+                "ORD008975",
+                "01/04/2025",
+                "Khách lẻ"
+              ]
+            ]
+          },
+          "Thang 05 2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "same_columns_as": "Thang 03 2025",
+            "sample_rows": [
+              [
+                "Matcha latte (M)",
+                "1",
+                "ly",
+                "49k",
+                "đã xong",
+                "49.000đ",
+                "2025-05-01 06:03:16",
+                "ORD013732",
+                "01/05/2025",
+                "Đoàn Hạnh Hoàng"
+              ]
+            ]
+          },
+          "Thang 06 2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "same_columns_as": "Thang 03 2025",
+            "sample_rows": [
+              [
+                "Sinh tố bơ (M)",
+                "-1",
+                "ly",
+                "-45k",
+                "Đổi trả",
+                "45.000đ",
+                "2025-06-01 16:09:26",
+                "ORD018046",
+                "45809",
+                "Khách lẻ"
+              ]
+            ]
+          },
+          "Thang 07 2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "same_columns_as": "Thang 03 2025",
+            "sample_rows": [
+              [
+                "Cà phê sữa (M)",
+                "-1",
+                "ly",
+                "-30.500đ",
+                "hàng trả về",
+                "30.500đ",
+                "2025-07-01 10:05:37",
+                "ORD023162",
+                "01/07/2025",
+                "Khách lẻ"
+              ]
+            ]
+          },
+          "Thang 08 2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "same_columns_as": "Thang 03 2025",
+            "sample_rows": [
+              [
+                "Cà phê đen (L)",
+                "1",
+                "ly",
+                "31k",
+                "đã xong",
+                "31.000đ",
+                "2025-08-01 06:05:00",
+                "ORD028751",
+                "01/08/2025",
+                "Khách lẻ"
+              ]
+            ]
+          },
+          "Thang 09 2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "same_columns_as": "Thang 03 2025",
+            "sample_rows": [
+              [
+                "Cà phê đen (L)",
+                "1",
+                "ly",
+                "31.000đ",
+                "đã lấy",
+                "31.000đ",
+                "2025-09-01 06:11:34",
+                "ORD034075",
+                "45901",
+                "Khách lẻ"
+              ]
+            ]
+          },
+          "Thang 10 2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "same_columns_as": "Thang 03 2025",
+            "sample_rows": [
+              [
+                "Cà phê sữa (M)",
+                "-1",
+                "ly",
+                "-30.500đ",
+                "Trả hàng",
+                "30.500đ",
+                "2025-10-01 14:10:46",
+                "ORD038783",
+                "01/10/2025",
+                "Khách lẻ"
+              ]
+            ]
+          },
+          "Thang 11 2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "same_columns_as": "Thang 03 2025",
+            "sample_rows": [
+              [
+                "Trà chanh (M)",
+                "1",
+                "ly",
+                "25.000đ",
+                "đã xong",
+                "25.000đ",
+                "2025-11-01 06:01:54",
+                "ORD044583",
+                "45962",
+                "Lương Quân Thắng"
+              ]
+            ]
+          },
+          "Thang 12 2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "same_columns_as": "Thang 03 2025",
+            "sample_rows": [
+              [
+                "Hồng trà sữa (M)",
+                "2",
+                "ly",
+                "78.000đ",
+                "đã lấy",
+                "39.000đ",
+                "2025-12-01 06:05:06",
+                "ORD049804",
+                "01/12/2025",
+                "Khách lẻ"
+              ]
+            ]
+          },
+          "Thang 01 2026": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 1,
+            "same_columns_as": "Thang 03 2025",
+            "sample_rows": [
+              [
+                "Cà phê sữa (M)",
+                "-1",
+                "ly",
+                "-30.500đ",
+                "hàng trả về",
+                "30.500đ",
+                "2026-01-01 14:58:08",
+                "ORD054396",
+                "46023",
+                "Tăng Đức Giang"
+              ]
+            ]
+          }
+        },
+        "hint": "Use load_clean_df(file, sheet=..., dedup_order=False) or pd.read_excel(file, sheet_name=...) — headers are auto-detected."
+      }
+    }
+  ],
+  "api_errors": [],
+  "jsonl_parse_errors": [],
+  "raw_final_text": "",
+  "prediction": {
+    "id": "q_338ae382671b",
+    "type": "abstain",
+    "answer": null
+  },
+  "type_source": "abstain",
+  "abstain_reason": "empty_final",
+  "tool_succeeded_but_final_empty": false,
+  "tool_rescue_prediction": null,
+  "stderr": ""
+}

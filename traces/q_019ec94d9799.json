@@ -1,0 +1,837 @@
+{
+  "id": "q_019ec94d9799",
+  "business_id": "biz_106",
+  "as_of_date": "2026-08-19",
+  "tool_mode": "eval_agent",
+  "temperature": 0.0,
+  "worker_id": 0,
+  "ollama_port": 11434,
+  "user_prompt": "3 mặt hàng bán chạy nhất tuần này là những mặt hàng nào?\n\nas_of_date: 2026-08-19",
+  "system_instructions": "Dữ liệu shop nằm trong `/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_shop_roots/q_019ec94d9799/data`. Danh sách file dữ liệu trong shop: ['BaoCaoTonKho.xlsx', 'DanhSachChiTietNhapHang.xlsx', 'DanhSachDonViTinh.xlsx', 'DanhSachHoaDon.xlsx', 'DanhSachHoaDonChiTiet_1.xlsx', 'DanhSachHoaDonChiTiet_2.xlsx', 'DanhSachKhachHang.xlsx', 'DanhSachNhapHang.xlsx', 'DanhSachSanPham.xlsx', 'SoQuy.xlsx'].\nQUY TRÌNH BẮT BUỘC (thực hiện ĐÚNG THỨ TỰ từng bước, KHÔNG nhảy cóc vào `run_python` khi chưa xong Bước 1 và Bước 2):\n- Bước 1 — ĐỌC THÔNG TIN SHOP & RULEBOOK TRƯỚC: Trước khi viết code hay tính toán, đọc kỹ rulebook ở trên trong system prompt để xác định định nghĩa chỉ tiêu, quy ước làm tròn, loại trừ đơn hủy/trả và kiểu `type` cần trả; đồng thời gọi tool `read` với `filePath=\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_shop_roots/q_019ec94d9799/data/README.md\"` để nắm quy ước riêng của shop, ý nghĩa từng file và từng cột.\n- Bước 2 — XEM BẢNG & SHEET BẰNG `inspect_table`: Gọi `inspect_table(file=None, column=None)` và `inspect_table(file='<ten_file>', column=None)` cho các file liên quan để biết chính xác danh sách sheet (chọn ĐÚNG sheet khớp tháng/năm của câu hỏi, không đọc nhầm sheet khác), tên cột, và nhãn `Trạng thái` thực tế.\n- Bước 3 — TÍNH TOÁN & CHỐT ĐÁP ÁN:\n  + Nếu chỉ cần đếm `count_distinct` trên một file CSV đơn giản: dùng `aggregate`.\n  + Với mọi câu hỏi còn lại (tra giá, lọc nhiều điều kiện, tổng/trung bình/tỷ lệ, lập bảng/danh sách, nối nhiều bảng, đọc `.xlsx`/`.sqlite`): dùng `run_python`.\nQuy tắc BẮT BUỘC khi gọi `run_python`:\n  (1) KHÔNG hardcode `/data/...`; truyền tên file tương đối cho `pd.read_excel`, `pd.read_csv`, `load_clean_df('ten_file', dedup_order=False)` (không truyền `parse_dates`), hoặc `explore_data('ten_file')`.\n  (2) Lọc ngày theo `resolve_date(expr, as_of_date=AS_OF_DATE)` + `parse_vn_date(series)` và chuẩn hóa mọi giá/tiền bằng `parse_vn_number(val)` (KHÔNG dùng `int()`/`float()` trực tiếp lên chuỗi `'37,000.0000'`); nếu rulebook loại đơn hủy/trả thì loại toàn bộ các dòng thuộc các mã đơn có trạng thái đó.\n  (3) Các helper `explore_data`, `load_clean_df`, `resolve_date`, `parse_vn_date`, `parse_vn_number`, `vn_num`, `emit_obs`, `emit_final` ĐÃ CÓ SẴN trong globals (KHÔNG import). Mọi lượt `run_python` PHẢI kết thúc bằng `emit_obs(data, msg)` khi thăm dò hoặc `emit_final(answer, type=\"number\", evidence=\"...\")` khi chốt (`type` đặt trong ngoặc kép hoặc dùng identifier `number`/`string`/`boolean`/`table`/`list`, KHÔNG gọi `emit_final()` rỗng).\n  (4) Với file XLSX nhiều sheet, mở ĐÚNG sheet khớp mốc thời gian trong câu hỏi (ví dụ ngày 01/12/2025 -> sheet `T12_2025`) và dùng `usecols` nếu file lớn.\n  (5) Chỉ chốt đáp án cuối sau khi `run_python` trả `kind=final` (hoặc `aggregate` hợp lệ). Sau khi gọi `emit_final` thành công, BẮT BUỘC phải xuất đáp án cuối cùng trong câu trả lời (trả đúng giá trị JSON của `answer` ví dụ `42`, bỏ giải thích). Nếu chưa xác minh được thì trả {\"type\":\"abstain\",\"answer\":null}.\n",
+  "rulebook_path": "/kaggle/working/hf_inference_bundle/data/train/rulebook.md",
+  "rulebook_sha256": "44c3b54e9cce5671ad4b84bf43f38d0fefcb18cd8fd8ca77738370bf534cde1a",
+  "shop_root": "/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_shop_roots/q_019ec94d9799/data",
+  "exit_code": -1,
+  "timed_out": true,
+  "finalization_retry_attempted": false,
+  "elapsed_sec": 600.125,
+  "finish_reason": "tool-calls",
+  "final_message_id": "msg_1e092493a00162JwHcf5gDMP45",
+  "tokens": {
+    "input": 17828,
+    "output": 3953,
+    "reasoning": 0,
+    "total": 125527
+  },
+  "tool_calls": [
+    {
+      "tool": "read",
+      "callID": "tyOFbUbHw4mnDgrtntdw8q5xCPJRkcHc",
+      "messageID": "msg_1e08b4f42001GegEjynbav0YG1",
+      "status": "completed",
+      "input": {
+        "filePath": "/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_shop_roots/q_019ec94d9799/data/README.md"
+      },
+      "output": "<path>/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_shop_roots/q_019ec94d9799/data/README.md</path>\n<type>file</type>\n<content>\n1: # Dữ liệu biz_106\n2: \n3: File máy POS xuất ra.\n4: \n5: ## File\n6: - `DanhSachHoaDon.xlsx` (xlsx)\n7: - `DanhSachHoaDonChiTiet_1.xlsx` (xlsx)\n8: - `DanhSachHoaDonChiTiet_2.xlsx` (xlsx)\n9: - `DanhSachSanPham.xlsx` (xlsx)\n10: - `DanhSachKhachHang.xlsx` (xlsx)\n11: - `BaoCaoTonKho.xlsx` (xlsx)\n12: - `DanhSachNhapHang.xlsx` (xlsx)\n13: - `DanhSachChiTietNhapHang.xlsx` (xlsx)\n14: - `SoQuy.xlsx` (xlsx)\n15: - `DanhSachDonViTinh.xlsx` (xlsx)\n16: \n17: ## Quy ước\n18: - Dữ liệu có đến hết 14/09/2026.\n19: - **Công nợ**: mỗi lần khách trả tiền cho một đơn là một dòng, **Giá trị** là số tiền trả lần đó; **Tổng sau giảm giá** là số khách phải trả cho cả đơn.\n20: - **Giá vốn**: **Giá vốn** là giá vốn một đơn vị bán.\n21: - **Tồn kho**: **Tồn cuối kỳ** là tồn cuối ngày cuối có dữ liệu, theo đơn vị cơ bản.\n22: - **Nhập hàng**: **Đơn giá** là giá nhập một đơn vị, theo đơn vị nhập của dòng; **Cần trả NCC** là tổng tiền của cả phiếu nhập.\n23: - **Quy đổi đơn vị**: số lượng ghi theo đơn vị của dòng, hệ số quy đổi ở `DanhSachDonViTinh.xlsx`.\n\n(End of file - total 23 lines)\n</content>",
+      "error": null,
+      "metadata": {
+        "preview": "# Dữ liệu biz_106\n\nFile máy POS xuất ra.\n\n## File\n- `DanhSachHoaDon.xlsx` (xlsx)\n- `DanhSachHoaDonChiTiet_1.xlsx` (xlsx)\n- `DanhSachHoaDonChiTiet_2.xlsx` (xlsx)\n- `DanhSachSanPham.xlsx` (xlsx)\n- `DanhSachKhachHang.xlsx` (xlsx)\n- `BaoCaoTonKho.xlsx` (xlsx)\n- `DanhSachNhapHang.xlsx` (xlsx)\n- `DanhSachChiTietNhapHang.xlsx` (xlsx)\n- `SoQuy.xlsx` (xlsx)\n- `DanhSachDonViTinh.xlsx` (xlsx)\n\n## Quy ước\n- Dữ liệu có đến hết 14/09/2026.\n- **Công nợ**: mỗi lần khách trả tiền cho một đơn là một dòng, **Giá trị** là số tiền trả lần đó; **Tổng sau giảm giá** là số khách phải trả cho cả đơn.\n- **Giá vốn**: **Giá vốn** là giá vốn một đơn vị bán.",
+        "truncated": false,
+        "loaded": [],
+        "display": {
+          "type": "file",
+          "path": "/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_shop_roots/q_019ec94d9799/data/README.md",
+          "text": "# Dữ liệu biz_106\n\nFile máy POS xuất ra.\n\n## File\n- `DanhSachHoaDon.xlsx` (xlsx)\n- `DanhSachHoaDonChiTiet_1.xlsx` (xlsx)\n- `DanhSachHoaDonChiTiet_2.xlsx` (xlsx)\n- `DanhSachSanPham.xlsx` (xlsx)\n- `DanhSachKhachHang.xlsx` (xlsx)\n- `BaoCaoTonKho.xlsx` (xlsx)\n- `DanhSachNhapHang.xlsx` (xlsx)\n- `DanhSachChiTietNhapHang.xlsx` (xlsx)\n- `SoQuy.xlsx` (xlsx)\n- `DanhSachDonViTinh.xlsx` (xlsx)\n\n## Quy ước\n- Dữ liệu có đến hết 14/09/2026.\n- **Công nợ**: mỗi lần khách trả tiền cho một đơn là một dòng, **Giá trị** là số tiền trả lần đó; **Tổng sau giảm giá** là số khách phải trả cho cả đơn.\n- **Giá vốn**: **Giá vốn** là giá vốn một đơn vị bán.\n- **Tồn kho**: **Tồn cuối kỳ** là tồn cuối ngày cuối có dữ liệu, theo đơn vị cơ bản.\n- **Nhập hàng**: **Đơn giá** là giá nhập một đơn vị, theo đơn vị nhập của dòng; **Cần trả NCC** là tổng tiền của cả phiếu nhập.\n- **Quy đổi đơn vị**: số lượng ghi theo đơn vị của dòng, hệ số quy đổi ở `DanhSachDonViTinh.xlsx`.",
+          "lineStart": 1,
+          "lineEnd": 23,
+          "totalLines": 23,
+          "truncated": false
+        }
+      },
+      "time": {
+        "start": 1794768630491,
+        "end": 1794768630513
+      }
+    },
+    {
+      "tool": "inspect_table",
+      "callID": "PSpCYsdLpVpLuTiUKI01kzEqbqHyD9Az",
+      "messageID": "msg_1e08bf3050018DJfmKkPn7l1xt",
+      "status": "completed",
+      "input": {
+        "file": "DanhSachSanPham.xlsx",
+        "column": null
+      },
+      "output": "{\"file\": \"DanhSachSanPham.xlsx\", \"type\": \"xlsx\", \"sheets\": [\"Sheet1\"], \"sheets_preview\": {\"Sheet1\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 0, \"columns\": [\"Hình ảnh (url1,url2...)\", \"Vị trí kệ\", \"Ghi chú\", \"Được bán trực tiếp\", \"Nhóm hàng(3 Cấp)\", \"Mã barcode\", \"Mã hàng\", \"Thương hiệu\", \"Tồn lớn nhất\", \"Tên hàng\", \"Mã HH Liên quan\", \"Thuộc tính\", \"Giá bán\", \"Mô tả sản phẩm\", \"Loại hàng hóa\", \"Giá vốn\", \"ĐVT\", \"Bảo hành\", \"Đang kinh doanh\", \"Trọng lượng\", \"Mẫu ghi chú\", \"Định mức tồn tối thiểu\", \"Thời gian tạo\"], \"first_rows\": [[\"Hình ảnh (url1,url2...)\", \"Vị trí kệ\", \"Ghi chú\", \"Được bán trực tiếp\", \"Nhóm hàng(3 Cấp)\", \"Mã barcode\", \"Mã hàng\", \"Thương hiệu\", \"Tồn lớn nhất\", \"Tên hàng\", \"Mã HH Liên quan\", \"Thuộc tính\", \"Giá bán\", \"Mô tả sản phẩm\", \"Loại hàng hóa\", \"Giá vốn\", \"ĐVT\", \"Bảo hành\", \"Đang kinh doanh\", \"Trọng lượng\", \"Mẫu ghi chú\", \"Định mức tồn tối thiểu\", \"Thời gian tạo\"], [\"\", \"\", \"\", \"1\", \"cà phê\", \"8937889784207\", \"SP0001\", \"\", \"999999999\", \"Cà phê đen (M)\", \"\", \"\", \"27500\", \"\", \"Hàng hóa\", \"6742\", \"ly\", \"\", \"True\", \"\", \"\", \"0\", \"2023-06-09 00:00:00\"], [\"\", \"\", \"\", \"1\", \"cà phê\", \"8932826184317\", \"SP0002\", \"\", \"999999999\", \"Cà phê đen (L)\", \"\", \"\", \"31000\", \"\", \"Hàng hóa\", \"9150\", \"ly\", \"\", \"True\", \"\", \"\", \"0\", \"2023-06-13 00:00:00\"]], \"sample_rows\": [[\"\", \"\", \"\", \"1\", \"cà phê\", \"8937889784207\", \"SP0001\", \"\", \"999999999\", \"Cà phê đen (M)\", \"\", \"\", \"27500\", \"\", \"Hàng hóa\", \"6742\", \"ly\", \"\", \"True\", \"\", \"\", \"0\", \"2023-06-09 00:00:00\"], [\"\", \"\", \"\", \"1\", \"cà phê\", \"8932826184317\", \"SP0002\", \"\", \"999999999\", \"Cà phê đen (L)\", \"\", \"\", \"31000\", \"\", \"Hàng hóa\", \"9150\", \"ly\", \"\", \"True\", \"\", \"\", \"0\", \"2023-06-13 00:00:00\"]]}}, \"hint\": \"Use load_clean_df(file, sheet=..., dedup_order=False) or pd.read_excel(file, sheet_name=...) — headers are auto-detected.\"}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794768643264,
+        "end": 1794768643275
+      },
+      "full_result": {
+        "file": "DanhSachSanPham.xlsx",
+        "type": "xlsx",
+        "sheets": [
+          "Sheet1"
+        ],
+        "sheets_preview": {
+          "Sheet1": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 0,
+            "columns": [
+              "Hình ảnh (url1,url2...)",
+              "Vị trí kệ",
+              "Ghi chú",
+              "Được bán trực tiếp",
+              "Nhóm hàng(3 Cấp)",
+              "Mã barcode",
+              "Mã hàng",
+              "Thương hiệu",
+              "Tồn lớn nhất",
+              "Tên hàng",
+              "Mã HH Liên quan",
+              "Thuộc tính",
+              "Giá bán",
+              "Mô tả sản phẩm",
+              "Loại hàng hóa",
+              "Giá vốn",
+              "ĐVT",
+              "Bảo hành",
+              "Đang kinh doanh",
+              "Trọng lượng",
+              "Mẫu ghi chú",
+              "Định mức tồn tối thiểu",
+              "Thời gian tạo"
+            ],
+            "first_rows": [
+              [
+                "Hình ảnh (url1,url2...)",
+                "Vị trí kệ",
+                "Ghi chú",
+                "Được bán trực tiếp",
+                "Nhóm hàng(3 Cấp)",
+                "Mã barcode",
+                "Mã hàng",
+                "Thương hiệu",
+                "Tồn lớn nhất",
+                "Tên hàng",
+                "Mã HH Liên quan",
+                "Thuộc tính",
+                "Giá bán",
+                "Mô tả sản phẩm",
+                "Loại hàng hóa",
+                "Giá vốn",
+                "ĐVT",
+                "Bảo hành",
+                "Đang kinh doanh",
+                "Trọng lượng",
+                "Mẫu ghi chú",
+                "Định mức tồn tối thiểu",
+                "Thời gian tạo"
+              ],
+              [
+                "",
+                "",
+                "",
+                "1",
+                "cà phê",
+                "8937889784207",
+                "SP0001",
+                "",
+                "999999999",
+                "Cà phê đen (M)",
+                "",
+                "",
+                "27500",
+                "",
+                "Hàng hóa",
+                "6742",
+                "ly",
+                "",
+                "True",
+                "",
+                "",
+                "0",
+                "2023-06-09 00:00:00"
+              ],
+              [
+                "",
+                "",
+                "",
+                "1",
+                "cà phê",
+                "8932826184317",
+                "SP0002",
+                "",
+                "999999999",
+                "Cà phê đen (L)",
+                "",
+                "",
+                "31000",
+                "",
+                "Hàng hóa",
+                "9150",
+                "ly",
+                "",
+                "True",
+                "",
+                "",
+                "0",
+                "2023-06-13 00:00:00"
+              ]
+            ],
+            "sample_rows": [
+              [
+                "",
+                "",
+                "",
+                "1",
+                "cà phê",
+                "8937889784207",
+                "SP0001",
+                "",
+                "999999999",
+                "Cà phê đen (M)",
+                "",
+                "",
+                "27500",
+                "",
+                "Hàng hóa",
+                "6742",
+                "ly",
+                "",
+                "True",
+                "",
+                "",
+                "0",
+                "2023-06-09 00:00:00"
+              ],
+              [
+                "",
+                "",
+                "",
+                "1",
+                "cà phê",
+                "8932826184317",
+                "SP0002",
+                "",
+                "999999999",
+                "Cà phê đen (L)",
+                "",
+                "",
+                "31000",
+                "",
+                "Hàng hóa",
+                "9150",
+                "ly",
+                "",
+                "True",
+                "",
+                "",
+                "0",
+                "2023-06-13 00:00:00"
+              ]
+            ]
+          }
+        },
+        "hint": "Use load_clean_df(file, sheet=..., dedup_order=False) or pd.read_excel(file, sheet_name=...) — headers are auto-detected."
+      }
+    },
+    {
+      "tool": "inspect_table",
+      "callID": "nrjIxLwTz8XlP1VUIfHnFs6BIb2SsaU3",
+      "messageID": "msg_1e08bf3050018DJfmKkPn7l1xt",
+      "status": "completed",
+      "input": {
+        "file": null,
+        "column": null
+      },
+      "output": "{\"files\": [], \"other_files\": [{\"file\": \"BaoCaoTonKho.xlsx\", \"size_kb\": 6.3, \"sheets\": [\"Sheet1\"]}, {\"file\": \"DanhSachChiTietNhapHang.xlsx\", \"size_kb\": 49.3, \"sheets\": [\"Sheet1\"]}, {\"file\": \"DanhSachDonViTinh.xlsx\", \"size_kb\": 4.8, \"sheets\": [\"Sheet1\"]}, {\"file\": \"DanhSachHoaDon.xlsx\", \"size_kb\": 4385.2, \"sheets\": [\"Sheet1\"]}, {\"file\": \"DanhSachHoaDonChiTiet_1.xlsx\", \"size_kb\": 4741.6, \"sheets\": [\"Sheet1\"]}, {\"file\": \"DanhSachHoaDonChiTiet_2.xlsx\", \"size_kb\": 1398.0, \"sheets\": [\"Sheet1\"]}, {\"file\": \"DanhSachKhachHang.xlsx\", \"size_kb\": 17.3, \"sheets\": [\"Sheet1\"]}, {\"file\": \"DanhSachNhapHang.xlsx\", \"size_kb\": 18.6, \"sheets\": [\"Sheet1\"]}, {\"file\": \"DanhSachSanPham.xlsx\", \"size_kb\": 8.8, \"sheets\": [\"Sheet1\"]}, {\"file\": \"SoQuy.xlsx\", \"size_kb\": 2560.3, \"sheets\": [\"Sheet1\"]}], \"hint\": \"Shop has non-CSV files. Use inspect_table(file='<name>') for sheets/headers or run_python with explore_data('<name>') / load_clean_df('<name>') / openpyxl / sqlite3.\"}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794768661686,
+        "end": 1794768661692
+      },
+      "full_result": {
+        "files": [],
+        "other_files": [
+          {
+            "file": "BaoCaoTonKho.xlsx",
+            "size_kb": 6.3,
+            "sheets": [
+              "Sheet1"
+            ]
+          },
+          {
+            "file": "DanhSachChiTietNhapHang.xlsx",
+            "size_kb": 49.3,
+            "sheets": [
+              "Sheet1"
+            ]
+          },
+          {
+            "file": "DanhSachDonViTinh.xlsx",
+            "size_kb": 4.8,
+            "sheets": [
+              "Sheet1"
+            ]
+          },
+          {
+            "file": "DanhSachHoaDon.xlsx",
+            "size_kb": 4385.2,
+            "sheets": [
+              "Sheet1"
+            ]
+          },
+          {
+            "file": "DanhSachHoaDonChiTiet_1.xlsx",
+            "size_kb": 4741.6,
+            "sheets": [
+              "Sheet1"
+            ]
+          },
+          {
+            "file": "DanhSachHoaDonChiTiet_2.xlsx",
+            "size_kb": 1398.0,
+            "sheets": [
+              "Sheet1"
+            ]
+          },
+          {
+            "file": "DanhSachKhachHang.xlsx",
+            "size_kb": 17.3,
+            "sheets": [
+              "Sheet1"
+            ]
+          },
+          {
+            "file": "DanhSachNhapHang.xlsx",
+            "size_kb": 18.6,
+            "sheets": [
+              "Sheet1"
+            ]
+          },
+          {
+            "file": "DanhSachSanPham.xlsx",
+            "size_kb": 8.8,
+            "sheets": [
+              "Sheet1"
+            ]
+          },
+          {
+            "file": "SoQuy.xlsx",
+            "size_kb": 2560.3,
+            "sheets": [
+              "Sheet1"
+            ]
+          }
+        ],
+        "hint": "Shop has non-CSV files. Use inspect_table(file='<name>') for sheets/headers or run_python with explore_data('<name>') / load_clean_df('<name>') / openpyxl / sqlite3."
+      }
+    },
+    {
+      "tool": "inspect_table",
+      "callID": "kCklfhGi9XfHFjWERJWy4I6pPqRkbcJb",
+      "messageID": "msg_1e08c6ccb001dyE2G6xzOAtXqr",
+      "status": "completed",
+      "input": {
+        "file": "DanhSachHoaDon.xlsx",
+        "column": "None"
+      },
+      "output": "{\"file\": \"DanhSachHoaDon.xlsx\", \"type\": \"xlsx\", \"sheets\": [\"Sheet1\"], \"sheets_preview\": {\"Sheet1\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"columns\": [\"Mã hóa đơn\", \"Thời gian\", \"Mã KH\", \"Khách hàng\", \"Tổng tiền hàng\", \"Giảm giá\", \"Tổng sau giảm giá\", \"Khách đã trả\", \"Phương thức thanh toán\", \"Trạng thái\", \"Thời gian tạo\", \"Ghi chú\"], \"first_rows\": [[\"DANH SÁCH HÓA ĐƠN\"], [], [\"Mã hóa đơn\", \"Thời gian\", \"Mã KH\", \"Khách hàng\", \"Tổng tiền hàng\", \"Giảm giá\", \"Tổng sau giảm giá\", \"Khách đã trả\", \"Phương thức thanh toán\", \"Trạng thái\", \"Thời gian tạo\", \"Ghi chú\"], [\"ORD000001\", \"01/02/2025\", \"KH0043\", \"Triệu Hằng Hiếu\", \"90,000\", \"0\", \"90,000\", \"90,000\", \"Tiền mặt\", \"xong\", \"2025-02-01 06:03:42\"], [\"ORD000002\", \"01/02/2025\", \"KH0091\", \"Doãn Dũng Thanh\", \"55,000\", \"0\", \"55,000\", \"55,000\", \"Tiền mặt\", \"xong\", \"2025-02-01 06:38:13\"]], \"sample_rows\": [[\"ORD000001\", \"01/02/2025\", \"KH0043\", \"Triệu Hằng Hiếu\", \"90,000\", \"0\", \"90,000\", \"90,000\", \"Tiền mặt\", \"xong\", \"2025-02-01 06:03:42\"], [\"ORD000002\", \"01/02/2025\", \"KH0091\", \"Doãn Dũng Thanh\", \"55,000\", \"0\", \"55,000\", \"55,000\", \"Tiền mặt\", \"xong\", \"2025-02-01 06:38:13\"]]}}, \"hint\": \"Use load_clean_df(file, sheet=..., dedup_order=False) or pd.read_excel(file, sheet_name=...) — headers are auto-detected.\"}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794768677886,
+        "end": 1794768677894
+      },
+      "full_result": {
+        "file": "DanhSachHoaDon.xlsx",
+        "type": "xlsx",
+        "sheets": [
+          "Sheet1"
+        ],
+        "sheets_preview": {
+          "Sheet1": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "columns": [
+              "Mã hóa đơn",
+              "Thời gian",
+              "Mã KH",
+              "Khách hàng",
+              "Tổng tiền hàng",
+              "Giảm giá",
+              "Tổng sau giảm giá",
+              "Khách đã trả",
+              "Phương thức thanh toán",
+              "Trạng thái",
+              "Thời gian tạo",
+              "Ghi chú"
+            ],
+            "first_rows": [
+              [
+                "DANH SÁCH HÓA ĐƠN"
+              ],
+              [],
+              [
+                "Mã hóa đơn",
+                "Thời gian",
+                "Mã KH",
+                "Khách hàng",
+                "Tổng tiền hàng",
+                "Giảm giá",
+                "Tổng sau giảm giá",
+                "Khách đã trả",
+                "Phương thức thanh toán",
+                "Trạng thái",
+                "Thời gian tạo",
+                "Ghi chú"
+              ],
+              [
+                "ORD000001",
+                "01/02/2025",
+                "KH0043",
+                "Triệu Hằng Hiếu",
+                "90,000",
+                "0",
+                "90,000",
+                "90,000",
+                "Tiền mặt",
+                "xong",
+                "2025-02-01 06:03:42"
+              ],
+              [
+                "ORD000002",
+                "01/02/2025",
+                "KH0091",
+                "Doãn Dũng Thanh",
+                "55,000",
+                "0",
+                "55,000",
+                "55,000",
+                "Tiền mặt",
+                "xong",
+                "2025-02-01 06:38:13"
+              ]
+            ],
+            "sample_rows": [
+              [
+                "ORD000001",
+                "01/02/2025",
+                "KH0043",
+                "Triệu Hằng Hiếu",
+                "90,000",
+                "0",
+                "90,000",
+                "90,000",
+                "Tiền mặt",
+                "xong",
+                "2025-02-01 06:03:42"
+              ],
+              [
+                "ORD000002",
+                "01/02/2025",
+                "KH0091",
+                "Doãn Dũng Thanh",
+                "55,000",
+                "0",
+                "55,000",
+                "55,000",
+                "Tiền mặt",
+                "xong",
+                "2025-02-01 06:38:13"
+              ]
+            ]
+          }
+        },
+        "hint": "Use load_clean_df(file, sheet=..., dedup_order=False) or pd.read_excel(file, sheet_name=...) — headers are auto-detected."
+      }
+    },
+    {
+      "tool": "inspect_table",
+      "callID": "9jKaaLzfrQwIN9PE0Jo37GnTnkjxT5J0",
+      "messageID": "msg_1e08c6ccb001dyE2G6xzOAtXqr",
+      "status": "completed",
+      "input": {
+        "file": "DanhSachHoaDonChiTiet_1.xlsx",
+        "column": "None"
+      },
+      "output": "{\"file\": \"DanhSachHoaDonChiTiet_1.xlsx\", \"type\": \"xlsx\", \"sheets\": [\"Sheet1\"], \"sheets_preview\": {\"Sheet1\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"columns\": [\"Mã hóa đơn\", \"STT\", \"Mã hàng\", \"Tên hàng\", \"Đơn vị tính\", \"Số lượng\", \"Đơn giá\", \"Giảm giá\", \"Thành tiền\", \"Số lượng quy đổi\", \"Giá vốn\"], \"first_rows\": [[\"DANH SÁCH CHI TIẾT HÓA ĐƠN\"], [], [\"Mã hóa đơn\", \"STT\", \"Mã hàng\", \"Tên hàng\", \"Đơn vị tính\", \"Số lượng\", \"Đơn giá\", \"Giảm giá\", \"Thành tiền\", \"Số lượng quy đổi\", \"Giá vốn\"], [\"ORD000001\", \"1\", \"SP0026\", \"Hồng trà sữa (L)\", \"ly\", \"1\", \"45,000\", \"0\", \"45,000\", \"1\", \"13,000\"], [\"ORD000001\", \"2\", \"SP0038\", \"Nước ép cam (L)\", \"ly\", \"1\", \"45,000\", \"0\", \"45,000\", \"1\", \"16,000\"]], \"sample_rows\": [[\"ORD000001\", \"1\", \"SP0026\", \"Hồng trà sữa (L)\", \"ly\", \"1\", \"45,000\", \"0\", \"45,000\", \"1\", \"13,000\"], [\"ORD000001\", \"2\", \"SP0038\", \"Nước ép cam (L)\", \"ly\", \"1\", \"45,000\", \"0\", \"45,000\", \"1\", \"16,000\"]]}}, \"hint\": \"Use load_clean_df(file, sheet=..., dedup_order=False) or pd.read_excel(file, sheet_name=...) — headers are auto-detected.\"}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794768685272,
+        "end": 1794768685279
+      },
+      "full_result": {
+        "file": "DanhSachHoaDonChiTiet_1.xlsx",
+        "type": "xlsx",
+        "sheets": [
+          "Sheet1"
+        ],
+        "sheets_preview": {
+          "Sheet1": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "columns": [
+              "Mã hóa đơn",
+              "STT",
+              "Mã hàng",
+              "Tên hàng",
+              "Đơn vị tính",
+              "Số lượng",
+              "Đơn giá",
+              "Giảm giá",
+              "Thành tiền",
+              "Số lượng quy đổi",
+              "Giá vốn"
+            ],
+            "first_rows": [
+              [
+                "DANH SÁCH CHI TIẾT HÓA ĐƠN"
+              ],
+              [],
+              [
+                "Mã hóa đơn",
+                "STT",
+                "Mã hàng",
+                "Tên hàng",
+                "Đơn vị tính",
+                "Số lượng",
+                "Đơn giá",
+                "Giảm giá",
+                "Thành tiền",
+                "Số lượng quy đổi",
+                "Giá vốn"
+              ],
+              [
+                "ORD000001",
+                "1",
+                "SP0026",
+                "Hồng trà sữa (L)",
+                "ly",
+                "1",
+                "45,000",
+                "0",
+                "45,000",
+                "1",
+                "13,000"
+              ],
+              [
+                "ORD000001",
+                "2",
+                "SP0038",
+                "Nước ép cam (L)",
+                "ly",
+                "1",
+                "45,000",
+                "0",
+                "45,000",
+                "1",
+                "16,000"
+              ]
+            ],
+            "sample_rows": [
+              [
+                "ORD000001",
+                "1",
+                "SP0026",
+                "Hồng trà sữa (L)",
+                "ly",
+                "1",
+                "45,000",
+                "0",
+                "45,000",
+                "1",
+                "13,000"
+              ],
+              [
+                "ORD000001",
+                "2",
+                "SP0038",
+                "Nước ép cam (L)",
+                "ly",
+                "1",
+                "45,000",
+                "0",
+                "45,000",
+                "1",
+                "16,000"
+              ]
+            ]
+          }
+        },
+        "hint": "Use load_clean_df(file, sheet=..., dedup_order=False) or pd.read_excel(file, sheet_name=...) — headers are auto-detected."
+      }
+    },
+    {
+      "tool": "inspect_table",
+      "callID": "SVPX5qQUveMM3kdZjp2NGysfjz7l10oO",
+      "messageID": "msg_1e08c6ccb001dyE2G6xzOAtXqr",
+      "status": "completed",
+      "input": {
+        "file": "DanhSachDonViTinh.xlsx",
+        "column": "None"
+      },
+      "output": "{\"file\": \"DanhSachDonViTinh.xlsx\", \"type\": \"xlsx\", \"sheets\": [\"Sheet1\"], \"sheets_preview\": {\"Sheet1\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 0, \"columns\": [\"Mã hàng\", \"ĐVT\", \"Quy đổi\", \"Giá bán\"], \"first_rows\": [[\"Mã hàng\", \"ĐVT\", \"Quy đổi\", \"Giá bán\"], [\"SP0049\", \"hộp\", \"6\", \"222000\"], [\"SP0050\", \"hộp\", \"6\", \"270000\"]], \"sample_rows\": [[\"SP0049\", \"hộp\", \"6\", \"222000\"], [\"SP0050\", \"hộp\", \"6\", \"270000\"]]}}, \"hint\": \"Use load_clean_df(file, sheet=..., dedup_order=False) or pd.read_excel(file, sheet_name=...) — headers are auto-detected.\"}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794768686038,
+        "end": 1794768686042
+      },
+      "full_result": {
+        "file": "DanhSachDonViTinh.xlsx",
+        "type": "xlsx",
+        "sheets": [
+          "Sheet1"
+        ],
+        "sheets_preview": {
+          "Sheet1": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 0,
+            "columns": [
+              "Mã hàng",
+              "ĐVT",
+              "Quy đổi",
+              "Giá bán"
+            ],
+            "first_rows": [
+              [
+                "Mã hàng",
+                "ĐVT",
+                "Quy đổi",
+                "Giá bán"
+              ],
+              [
+                "SP0049",
+                "hộp",
+                "6",
+                "222000"
+              ],
+              [
+                "SP0050",
+                "hộp",
+                "6",
+                "270000"
+              ]
+            ],
+            "sample_rows": [
+              [
+                "SP0049",
+                "hộp",
+                "6",
+                "222000"
+              ],
+              [
+                "SP0050",
+                "hộp",
+                "6",
+                "270000"
+              ]
+            ]
+          }
+        },
+        "hint": "Use load_clean_df(file, sheet=..., dedup_order=False) or pd.read_excel(file, sheet_name=...) — headers are auto-detected."
+      }
+    },
+    {
+      "tool": "run_python",
+      "callID": "vDJX4r3HpvlKnvUtoBF2Mu35uSfQkVCx",
+      "messageID": "msg_1e08ccbe7001VPKRwb7jcVcZGD",
+      "status": "completed",
+      "input": {
+        "code": "from datetime import datetime, timedelta\nimport pandas as pd\n\nAS_OF = \"2026-08-19\"\ndf = load_clean_df(\"DanhSachHoaDon\", sheet=1, dedup_order=False)\ndet = pd.concat([load_clean_df(\"DanhSachHoaDonChiTiet_1\", sheet=1, dedup_order=False),\n                 load_clean_df(\"DanhSachHoaDonChiTiet_2\", sheet=1, dedup_order=False)])\nuni = load_clean_df(\"DanhSachDonViTinh\", sheet=0, dedup_order=False)\nsp = load_clean_df(\"DanhSachSanPham\", sheet=0, dedup_order=False)\n\ndf.columns\nAS_OF_DT = pd.to_datetime(AS_OF)\nday_of_week = df['Thời gian'].dt.normalize().dt.day_name()\nprint(day_of_week.value_counts())\n# find Monday <= today\ntoday = pd.to_datetime(AS_OF)\nstart = today - timedelta(days=today.dayofweek)  # Monday of this week\nprint(\"start\", start, \"end\", today)\n\n# merge unit conversion factor from Đơn vị tính to base unit\ndef build_factor():\n    unit_base = {}\n    for _, r in uni.iterrows():\n        uid = r['Mã hàng']; ut = str(r['ĐVT']).strip().lower(); fac = r['Quy đổi']\n        unit_base[(uid, ut)] = float(fac)\n    return unit_base\nub = build_factor()\nprint(ub)\n\ndef ton_base(row, uid):\n    qty = float(row['Số lượng'])\n    ut = str(row['Đơn vị tính']).strip().lower()\n    if ut in ub.get(uid, {}):\n        return qty * ub[uid][ut]\n    return qty\n\ndf['_order_date'] = pd.to_datetime(df['Thời gian']).dt.normalize()\nweek = df[(df['_order_date']>=start)&(df['_order_date']<=today)]\n# exclude cancelled and returned\nprod = week.merge(det, on='Mã hóa đơn', how='inner')\nprod['qty_base'] = prod.apply(lambda r: ton_base(r, r['Mã hàng']), axis=1)\nprint(prod[['Mã hàng','Tên hàng','Số lượng','Đơn vị tính','qty_base']].head())\nprint(prod['qty_base'].sum())\n"
+      },
+      "output": "{\"success\": false, \"kind\": \"error\", \"error_kind\": \"runtime_error\", \"error\": \"Traceback (most recent call last):\\n  File \\\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmpf5od5dtz.py\\\", line 1012, in <module>\\n    df = load_clean_df(\\\"DanhSachHoaDon\\\", sheet=1, dedup_order=False)\\n  File \\\"/kaggle/working/opencode_structured_runtime/src/agent/sandbox.py\\\", line 689, in load_clean_df\\n    df = _READ_EXCEL(resolved, sheet_name=sheet)\\n  File \\\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmpf5od5dtz.py\\\", line 623, in _bridge_smart_read_excel\\n    res = _orig_read_excel(io, *args, **kwargs)\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/io/excel/_base.py\\\", line 508, in read_excel\\n    data = io.parse(\\n        sheet_name=sheet_name,\\n    ...<21 lines>...\\n        dtype_backend=dtype_backend,\\n    )\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/io/excel/_base.py\\\", line 1616, in parse\\n    return self._reader.parse(\\n           ~~~~~~~~~~~~~~~~~~^\\n        sheet_name=sheet_name,\\n        ^^^^^^^^^^^^^^^^^^^^^^\\n    ...<17 lines>...\\n        **kwds,\\n        ^^^^^^^\\n    )\\n    ^\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/io/excel/_base.py\\\", line 775, in parse\\n    sheet = self.get_sheet_by_index(asheetname)\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/io/excel/_openpyxl.py\\\", line 586, in get_sheet_by_index\\n    self.raise_if_bad_sheet_by_index(index)\\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/io/excel/_base.py\\\", line 618, in raise_if_bad_sheet_by_index\\n    raise ValueError(\\n        f\\\"Worksheet index {index} is invalid, {n_sheets} worksheets found\\\"\\n    )\\nValueError: Worksheet index 1 is invalid, 1 worksheets found\", \"stdout\": \"\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmpf5od5dtz.py\\\", line 1012, in <module>\\n    df = load_clean_df(\\\"DanhSachHoaDon\\\", sheet=1, dedup_order=False)\\n  File \\\"/kaggle/working/opencode_structured_runtime/src/agent/sandbox.py\\\", line 689, in load_clean_df\\n    df = _READ_EXCEL(resolved, s\\n... [truncated 1041 chars; filter/aggregate before printing] ...\\n ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/io/excel/_base.py\\\", line 618, in raise_if_bad_sheet_by_index\\n    raise ValueError(\\n        f\\\"Worksheet index {index} is invalid, {n_sheets} worksheets found\\\"\\n    )\\nValueError: Worksheet index 1 is invalid, 1 worksheets found\", \"returncode\": 1, \"timeout\": false}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794768722693,
+        "end": 1794768722697
+      },
+      "full_result": {
+        "success": false,
+        "kind": "error",
+        "error_kind": "runtime_error",
+        "error": "Traceback (most recent call last):\n  File \"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmpf5od5dtz.py\", line 1012, in <module>\n    df = load_clean_df(\"DanhSachHoaDon\", sheet=1, dedup_order=False)\n  File \"/kaggle/working/opencode_structured_runtime/src/agent/sandbox.py\", line 689, in load_clean_df\n    df = _READ_EXCEL(resolved, sheet_name=sheet)\n  File \"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmpf5od5dtz.py\", line 623, in _bridge_smart_read_excel\n    res = _orig_read_excel(io, *args, **kwargs)\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/io/excel/_base.py\", line 508, in read_excel\n    data = io.parse(\n        sheet_name=sheet_name,\n    ...<21 lines>...\n        dtype_backend=dtype_backend,\n    )\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/io/excel/_base.py\", line 1616, in parse\n    return self._reader.parse(\n           ~~~~~~~~~~~~~~~~~~^\n        sheet_name=sheet_name,\n        ^^^^^^^^^^^^^^^^^^^^^^\n    ...<17 lines>...\n        **kwds,\n        ^^^^^^^\n    )\n    ^\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/io/excel/_base.py\", line 775, in parse\n    sheet = self.get_sheet_by_index(asheetname)\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/io/excel/_openpyxl.py\", line 586, in get_sheet_by_index\n    self.raise_if_bad_sheet_by_index(index)\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/io/excel/_base.py\", line 618, in raise_if_bad_sheet_by_index\n    raise ValueError(\n        f\"Worksheet index {index} is invalid, {n_sheets} worksheets found\"\n    )\nValueError: Worksheet index 1 is invalid, 1 worksheets found",
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmpf5od5dtz.py\", line 1012, in <module>\n    df = load_clean_df(\"DanhSachHoaDon\", sheet=1, dedup_order=False)\n  File \"/kaggle/working/opencode_structured_runtime/src/agent/sandbox.py\", line 689, in load_clean_df\n    df = _READ_EXCEL(resolved, s\n... [truncated 1041 chars; filter/aggregate before printing] ...\n ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/io/excel/_base.py\", line 618, in raise_if_bad_sheet_by_index\n    raise ValueError(\n        f\"Worksheet index {index} is invalid, {n_sheets} worksheets found\"\n    )\nValueError: Worksheet index 1 is invalid, 1 worksheets found",
+        "returncode": 1,
+        "timeout": false
+      }
+    },
+    {
+      "tool": "run_python",
+      "callID": "ociFQkaWrmtZyEoMFzb30R5My1cXWmLo",
+      "messageID": "msg_1e08d5b140011blpS5EkRrg3AY",
+      "status": "completed",
+      "input": {
+        "code": "from datetime import datetime, timedelta\nimport pandas as pd\n\nAS_OF = \"2026-08-19\"\ndf = load_clean_df(\"DanhSachHoaDon\", dedup_order=False)\ndet = pd.concat([load_clean_df(\"DanhSachHoaDonChiTiet_1\", dedup_order=False),\n                 load_clean_df(\"DanhSachHoaDonChiTiet_2\", dedup_order=False)])\nuni = load_clean_df(\"DanhSachDonViTinh\", dedup_order=False)\nsp = load_clean_df(\"DanhSachSanPham\", dedup_order=False)\n\nprint(\"order cols:\", df.columns.tolist())\n\nAS_OF_DT = pd.to_datetime(AS_OF)\ntoday = pd.to_datetime(AS_OF)\nstart = today - timedelta(days=today.dayofweek)  # Monday of this week\nprint(\"start\", start, \"end\", today)\nprint(\"week of name:\", start.day_name(), today.day_name())\n\nub = {}\nfor _, r in uni.iterrows():\n    uid = r['Mã hàng']; ut = str(r['ĐVT']).strip().lower(); fac = r['Quy đổi']\n    if ut != '': ub[(uid, ut)] = float(fac)\nprint(\"units:\", ub)\n\ndef ton_base(row, uid):\n    qty = float(row['Số lượng'])\n    ut = str(row['Đơn vị tính']).strip().lower()\n    return qty * ub.get((uid, ut), 1.0)\n\ndf['_order_date'] = pd.to_datetime(df['Thời gian']).dt.normalize()\nweek = df[(df['_order_date']>=start)&(df['_order_date']<=today)]\nprod = week.merge(det, on='Mã hóa đơn', how='inner')\nprod['qty_base'] = prod.apply(lambda r: ton_base(r, r['Mã hàng']), axis=1)\nprint(\"week rows\", len(week), \"detail rows\", len(prod))\ngrp = prod.groupby(['Mã hàng','Tên hàng','Trạng thái']).agg(total_qty=('qty_base','sum'), n=('qty_base','size')).reset_index()\nprint(grp.sort_values(total_qty, ascending=False).head(40).to_string())\n"
+      },
+      "output": "{\"success\": false, \"kind\": \"error\", \"error_kind\": \"runtime_error\", \"error\": \"Traceback (most recent call last):\\n  File \\\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmp5dp1768l.py\\\", line 1040, in <module>\\n    prod['qty_base'] = prod.apply(lambda r: ton_base(r, r['Mã hàng']), axis=1)\\n    ~~~~^^^^^^^^^^^^\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\\\", line 4312, in __setitem__\\n    self._set_item_frame_value(key, value)\\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\\\", line 4470, in _set_item_frame_value\\n    raise ValueError(\\n    ...<2 lines>...\\n    )\\nValueError: Cannot set a DataFrame with multiple columns to the single column qty_base\", \"stdout\": \"order cols: ['Mã hóa đơn', 'Thời gian', 'Mã KH', 'Khách hàng', 'Tổng tiền hàng', 'Giảm giá', 'Tổng sau giảm giá', 'Khách đã trả', 'Phương thức thanh toán', 'Trạng thái', 'Thời gian tạo', 'Ghi chú']\\nstart 2026-08-17 00:00:00 end 2026-08-19 00:00:00\\nweek of name: Monday Wednesday\\nunits: {('SP0049', 'hộp'): 6.0, ('SP0050', 'hộp'): 6.0}\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmp5dp1768l.py\\\", line 1040, in <module>\\n    prod['qty_base'] = prod.apply(lambda r: ton_base(r, r['Mã hàng']), axis=1)\\n    ~~~~^^^^^^^^^^^^\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\\\", line 4312, in __setitem__\\n    self._set_item_frame_value(key, value)\\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\\\", line 4470, in _set_item_frame_value\\n    raise ValueError(\\n    ...<2 lines>...\\n    )\\nValueError: Cannot set a DataFrame with multiple columns to the single column qty_base\", \"returncode\": 1, \"timeout\": false}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794768823648,
+        "end": 1794768823653
+      },
+      "full_result": {
+        "success": false,
+        "kind": "error",
+        "error_kind": "runtime_error",
+        "error": "Traceback (most recent call last):\n  File \"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmp5dp1768l.py\", line 1040, in <module>\n    prod['qty_base'] = prod.apply(lambda r: ton_base(r, r['Mã hàng']), axis=1)\n    ~~~~^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\", line 4312, in __setitem__\n    self._set_item_frame_value(key, value)\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\", line 4470, in _set_item_frame_value\n    raise ValueError(\n    ...<2 lines>...\n    )\nValueError: Cannot set a DataFrame with multiple columns to the single column qty_base",
+        "stdout": "order cols: ['Mã hóa đơn', 'Thời gian', 'Mã KH', 'Khách hàng', 'Tổng tiền hàng', 'Giảm giá', 'Tổng sau giảm giá', 'Khách đã trả', 'Phương thức thanh toán', 'Trạng thái', 'Thời gian tạo', 'Ghi chú']\nstart 2026-08-17 00:00:00 end 2026-08-19 00:00:00\nweek of name: Monday Wednesday\nunits: {('SP0049', 'hộp'): 6.0, ('SP0050', 'hộp'): 6.0}",
+        "stderr": "Traceback (most recent call last):\n  File \"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmp5dp1768l.py\", line 1040, in <module>\n    prod['qty_base'] = prod.apply(lambda r: ton_base(r, r['Mã hàng']), axis=1)\n    ~~~~^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\", line 4312, in __setitem__\n    self._set_item_frame_value(key, value)\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\", line 4470, in _set_item_frame_value\n    raise ValueError(\n    ...<2 lines>...\n    )\nValueError: Cannot set a DataFrame with multiple columns to the single column qty_base",
+        "returncode": 1,
+        "timeout": false
+      }
+    },
+    {
+      "tool": "run_python",
+      "callID": "IysMz2e9NtTd86yjEaknnCwnrDDT6Y2J",
+      "messageID": "msg_1e08ee583001JDHdBQYFe41nYk",
+      "status": "completed",
+      "input": {
+        "code": "from datetime import timedelta\nimport pandas as pd\n\nAS_OF = \"2026-08-19\"\ndf = load_clean_df(\"DanhSachHoaDon\", dedup_order=False)\ndet = pd.concat([load_clean_df(\"DanhSachHoaDonChiTiet_1\", dedup_order=False),\n                 load_clean_df(\"DanhSachHoaDonChiTiet_2\", dedup_order=False)])\nuni = load_clean_df(\"DanhSachDonViTinh\", dedup_order=False)\n\nAS_OF_DT = pd.to_datetime(AS_OF)\ntoday = pd.to_datetime(AS_OF)\nstart = today - timedelta(days=today.dayofweek)\n\nub = {}\nfor _, r in uni.iterrows():\n    ut = str(r['ĐVT']).strip().lower()\n    if ut != '':\n        fac = float(r['Quy đổi'])\n        for hid in r['Mã hàng'].split(';') if pd.notna(r['Mã hàng']) else []:\n            hid = hid.strip()\n            if hid: ub[(hid, ut)] = fac\n\ndef ton_base(mh, sl, dvt):\n    ut = str(dvt).strip().lower() if pd.notna(dvt) else ''\n    return float(sl) * ub.get((mh, ut), 1.0)\n\ndf['_order_date'] = pd.to_datetime(df['Thời gian']).dt.normalize()\nweek = df[(df['_order_date']>=start)&(df['_order_date']<=today)]\nprod = week.merge(det, on='Mã hóa đơn', how='inner')\nprod['qty_base'] = prod.apply(lambda r: ton_base(r['Mã hàng'], r['Số lượng'], r['Đơn vị tính']), axis=1)\n\nprint(\"week orders:\", len(week), \"detail rows:\", len(prod))\ngrp = prod.groupby(['Mã hàng','Tên hàng','Trạng thái']).agg(total_qty=('qty_base','sum'), n=('qty_base','size')).reset_index()\nprint(grp.sort_values('total_qty', ascending=False).head(45).to_string())\n"
+      },
+      "output": "{\"success\": false, \"kind\": \"error\", \"error_kind\": \"runtime_error\", \"error\": \"Traceback (most recent call last):\\n  File \\\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmpow3pif_g.py\\\", line 1037, in <module>\\n    prod['qty_base'] = prod.apply(lambda r: ton_base(r['Mã hàng'], r['Số lượng'], r['Đơn vị tính']), axis=1)\\n    ~~~~^^^^^^^^^^^^\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\\\", line 4312, in __setitem__\\n    self._set_item_frame_value(key, value)\\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\\\", line 4470, in _set_item_frame_value\\n    raise ValueError(\\n    ...<2 lines>...\\n    )\\nValueError: Cannot set a DataFrame with multiple columns to the single column qty_base\", \"stdout\": \"\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmpow3pif_g.py\\\", line 1037, in <module>\\n    prod['qty_base'] = prod.apply(lambda r: ton_base(r['Mã hàng'], r['Số lượng'], r['Đơn vị tính']), axis=1)\\n    ~~~~^^^^^^^^^^^^\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\\\", line 4312, in __setitem__\\n    self._set_item_frame_value(key, value)\\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\\\", line 4470, in _set_item_frame_value\\n    raise ValueError(\\n    ...<2 lines>...\\n    )\\nValueError: Cannot set a DataFrame with multiple columns to the single column qty_base\", \"returncode\": 1, \"timeout\": false}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794768923295,
+        "end": 1794768923300
+      },
+      "full_result": {
+        "success": false,
+        "kind": "error",
+        "error_kind": "runtime_error",
+        "error": "Traceback (most recent call last):\n  File \"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmpow3pif_g.py\", line 1037, in <module>\n    prod['qty_base'] = prod.apply(lambda r: ton_base(r['Mã hàng'], r['Số lượng'], r['Đơn vị tính']), axis=1)\n    ~~~~^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\", line 4312, in __setitem__\n    self._set_item_frame_value(key, value)\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\", line 4470, in _set_item_frame_value\n    raise ValueError(\n    ...<2 lines>...\n    )\nValueError: Cannot set a DataFrame with multiple columns to the single column qty_base",
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmpow3pif_g.py\", line 1037, in <module>\n    prod['qty_base'] = prod.apply(lambda r: ton_base(r['Mã hàng'], r['Số lượng'], r['Đơn vị tính']), axis=1)\n    ~~~~^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\", line 4312, in __setitem__\n    self._set_item_frame_value(key, value)\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\", line 4470, in _set_item_frame_value\n    raise ValueError(\n    ...<2 lines>...\n    )\nValueError: Cannot set a DataFrame with multiple columns to the single column qty_base",
+        "returncode": 1,
+        "timeout": false
+      }
+    },
+    {
+      "tool": "run_python",
+      "callID": "RwqC9CQdNGM1olnFrMIC3OFqE1qxOJD1",
+      "messageID": "msg_1e0906ab2001hb5zWsB3FZOdwR",
+      "status": "completed",
+      "input": {
+        "code": "from datetime import timedelta\nimport pandas as pd\n\nAS_OF = \"2026-08-19\"\ndf = load_clean_df(\"DanhSachHoaDon\", dedup_order=False)\ndet = pd.concat([load_clean_df(\"DanhSachHoaDonChiTiet_1\", dedup_order=False),\n                 load_clean_df(\"DanhSachHoaDonChiTiet_2\", dedup_order=False)])\nuni = load_clean_df(\"DanhSachDonViTinh\", dedup_order=False)\n\nAS_OF_DT = pd.to_datetime(AS_OF)\ntoday = pd.to_datetime(AS_OF)\nstart = today - timedelta(days=today.dayofweek)\n\nub = {}\nfor _, r in uni.iterrows():\n    ut = str(r['ĐVT']).strip().lower()\n    if ut != '':\n        fac = float(r['Quy đổi'])\n        for mh in (r['Mã hàng'].split(';') if pd.notna(r['Mã hàng']) else []):\n            mh = mh.strip()\n            if mh: ub[(mh, ut)] = fac\n\ndef ton_base(row):\n    mh, sl, dvt = row['Mã hàng'], row['Số lượng'], row['Đơn vị tính']\n    ut = str(dvt).strip().lower() if pd.notna(dvt) else ''\n    return float(sl) * ub.get((mh, ut), 1.0)\n\ndf['_order_date'] = pd.to_datetime(df['Thời gian']).dt.normalize()\nweek = df[(df['_order_date']>=start)&(df['_order_date']<=today)]\nprod = week.merge(det, on='Mã hóa đơn', how='inner')\nprod['qty_base'] = prod.map(ton_base)\n\nprint(\"week orders:\", len(week), \"detail rows:\", len(prod))\ngrp = prod.groupby(['Mã hàng','Tên hàng','Trạng thái']).agg(total_qty=('qty_base','sum'), n=('qty_base','size')).reset_index()\nprint(grp.sort_values('total_qty', ascending=False).head(45).to_string())\n"
+      },
+      "output": "{\"success\": false, \"kind\": \"error\", \"error_kind\": \"runtime_error\", \"error\": \"Traceback (most recent call last):\\n  File \\\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmpjvb56cno.py\\\", line 1038, in <module>\\n    prod['qty_base'] = prod.map(ton_base)\\n    ~~~~^^^^^^^^^^^^\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\\\", line 4312, in __setitem__\\n    self._set_item_frame_value(key, value)\\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\\\", line 4470, in _set_item_frame_value\\n    raise ValueError(\\n    ...<2 lines>...\\n    )\\nValueError: Cannot set a DataFrame with multiple columns to the single column qty_base\", \"stdout\": \"\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmpjvb56cno.py\\\", line 1038, in <module>\\n    prod['qty_base'] = prod.map(ton_base)\\n    ~~~~^^^^^^^^^^^^\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\\\", line 4312, in __setitem__\\n    self._set_item_frame_value(key, value)\\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\\\", line 4470, in _set_item_frame_value\\n    raise ValueError(\\n    ...<2 lines>...\\n    )\\nValueError: Cannot set a DataFrame with multiple columns to the single column qty_base\", \"returncode\": 1, \"timeout\": false}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794769027890,
+        "end": 1794769027895
+      },
+      "full_result": {
+        "success": false,
+        "kind": "error",
+        "error_kind": "runtime_error",
+        "error": "Traceback (most recent call last):\n  File \"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmpjvb56cno.py\", line 1038, in <module>\n    prod['qty_base'] = prod.map(ton_base)\n    ~~~~^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\", line 4312, in __setitem__\n    self._set_item_frame_value(key, value)\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\", line 4470, in _set_item_frame_value\n    raise ValueError(\n    ...<2 lines>...\n    )\nValueError: Cannot set a DataFrame with multiple columns to the single column qty_base",
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmpjvb56cno.py\", line 1038, in <module>\n    prod['qty_base'] = prod.map(ton_base)\n    ~~~~^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\", line 4312, in __setitem__\n    self._set_item_frame_value(key, value)\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\", line 4470, in _set_item_frame_value\n    raise ValueError(\n    ...<2 lines>...\n    )\nValueError: Cannot set a DataFrame with multiple columns to the single column qty_base",
+        "returncode": 1,
+        "timeout": false
+      }
+    },
+    {
+      "tool": "run_python",
+      "callID": "MqNstEn6sbQkzslVRcDOawEIhgFEZMhW",
+      "messageID": "msg_1e0920349001h591fJgWWigTre",
+      "status": "completed",
+      "input": {
+        "code": "from datetime import timedelta\nimport pandas as pd\n\nAS_OF = \"2026-08-19\"\ndf = load_clean_df(\"DanhSachHoaDon\", dedup_order=False)\ndet = pd.concat([load_clean_df(\"DanhSachHoaDonChiTiet_1\", dedup_order=False),\n                 load_clean_df(\"DanhSachHoaDonChiTiet_2\", dedup_order=False)])\nuni = load_clean_df(\"DanhSachDonViTinh\", dedup_order=False)\n\ntoday = pd.to_datetime(AS_OF)\nstart = today - timedelta(days=today.dayofweek)\n\nub = {}\nfor _, r in uni.iterrows():\n    ut = str(r['ĐVT']).strip().lower()\n    if ut != '':\n        fac = float(r['Quy đổi'])\n        for mh in (r['Mã hàng'].split(';') if pd.notna(r['Mã hàng']) else []):\n            mh = mh.strip()\n            if mh: ub[(mh, ut)] = fac\n\ndef ton_base(row):\n    return float(row['Số lượng']) * ub.get((row['Mã hàng'], str(row['Đơn vị tính']).strip().lower() if pd.notna(row['Đơn vị tính']) else ''), 1.0)\n\ndf['_order_date'] = pd.to_datetime(df['Thời gian']).dt.normalize()\nweek = df[(df['_order_date']>=start)&(df['_order_date']<=today)]\nprod = week.merge(det, on='Mã hóa đơn', how='inner')\nprod['qty_base'] = [ton_base(r) for _, r in prod.iterrows()]\n\nprint(\"week orders:\", len(week), \"detail rows:\", len(prod))\n# Check status\nstatus counts\nprint(prod['Trạng thái'].value_counts())\nprint(prod.groupby(['Mã hàng','Tên hàng','Trạng thái']).agg(total_qty=('qty_base','sum'), n=('qty_base','size')).reset_index().sort_values('total_qty', ascending=False).head(48).to_string())\n"
+      },
+      "output": "{\"success\": false, \"kind\": \"error\", \"error_kind\": \"runtime_error\", \"error\": \"File \\\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmp2dtlaqz6.py\\\", line 1039\\n    status counts\\n           ^^^^^^\\nSyntaxError: invalid syntax\", \"stdout\": \"\", \"stderr\": \"File \\\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmp2dtlaqz6.py\\\", line 1039\\n    status counts\\n           ^^^^^^\\nSyntaxError: invalid syntax\", \"returncode\": 1, \"timeout\": false}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794769045798,
+        "end": 1794769045803
+      },
+      "full_result": {
+        "success": false,
+        "kind": "error",
+        "error_kind": "runtime_error",
+        "error": "File \"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmp2dtlaqz6.py\", line 1039\n    status counts\n           ^^^^^^\nSyntaxError: invalid syntax",
+        "stdout": "",
+        "stderr": "File \"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmp2dtlaqz6.py\", line 1039\n    status counts\n           ^^^^^^\nSyntaxError: invalid syntax",
+        "returncode": 1,
+        "timeout": false
+      }
+    },
+    {
+      "tool": "run_python",
+      "callID": "217kTs0WdAaPuxzez1YZ7baYs56u0EBC",
+      "messageID": "msg_1e092493a00162JwHcf5gDMP45",
+      "status": "completed",
+      "input": {
+        "code": "from datetime import timedelta\nimport pandas as pd\n\nAS_OF = \"2026-08-19\"\ndf = load_clean_df(\"DanhSachHoaDon\", dedup_order=False)\ndet = pd.concat([load_clean_df(\"DanhSachHoaDonChiTiet_1\", dedup_order=False),\n                 load_clean_df(\"DanhSachHoaDonChiTiet_2\", dedup_order=False)])\nuni = load_clean_df(\"DanhSachDonViTinh\", dedup_order=False)\n\ntoday = pd.to_datetime(AS_OF)\nstart = today - timedelta(days=today.dayofweek)\n\nub = {}\nfor _, r in uni.iterrows():\n    ut = str(r['ĐVT']).strip().lower()\n    if ut != '':\n        fac = float(r['Quy đổi'])\n        for mh in (r['Mã hàng'].split(';') if pd.notna(r['Mã hàng']) else []):\n            mh = mh.strip()\n            if mh: ub[(mh, ut)] = fac\n\ndef ton_base(row):\n    return float(row['Số lượng']) * ub.get((row['Mã hàng'], str(row['Đơn vị tính']).strip().lower() if pd.notna(row['Đơn vị tính']) else ''), 1.0)\n\ndf['_order_date'] = pd.to_datetime(df['Thời gian']).dt.normalize()\nweek = df[(df['_order_date']>=start)&(df['_order_date']<=today)]\nprod = week.merge(det, on='Mã hóa đơn', how='inner')\nprod['qty_base'] = [ton_base(r) for _, r in prod.iterrows()]\n\nprint(\"week orders:\", len(week), \"detail rows:\", len(prod))\nprint(prod['Trạng thái'].value_counts())\nprint(prod.groupby(['Mã hàng','Tên hàng']).agg(total_qty=('qty_base','sum'), n=('qty_base','size')).reset_index().sort_values('total_qty', ascending=False).head(48).to_string())\n"
+      },
+      "output": "{\"success\": false, \"kind\": \"error\", \"error_kind\": \"runtime_error\", \"error\": \"Traceback (most recent call last):\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/indexes/base.py\\\", line 3812, in get_loc\\n    return self._engine.get_loc(casted_key)\\n           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\\n  File \\\"pandas/_libs/index.pyx\\\", line 167, in pandas._libs.index.IndexEngine.get_loc\\n  File \\\"pandas/_libs/index.pyx\\\", line 196, in pandas._libs.index.IndexEngine.get_loc\\n  File \\\"pandas/_libs/hashtable_class_helper.pxi\\\", line 7088, in pandas._libs.hashtable.PyObjectHashTable.get_item\\n  File \\\"pandas/_libs/hashtable_class_helper.pxi\\\", line 7096, in pandas._libs.hashtable.PyObjectHashTable.get_item\\nKeyError: 'Trạng thái'\\n\\nThe above exception was the direct cause of the following exception:\\n\\nTraceback (most recent call last):\\n  File \\\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmp9pwe5dl1.py\\\", line 1038, in <module>\\n    print(prod['Trạng thái'].value_counts())\\n          ~~~~^^^^^^^^^^^^^^\\n  File \\\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmp9pwe5dl1.py\\\", line 677, in _bridge_df_getitem\\n    return _bridge_orig_df_getitem(self, key)\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\\\", line 4113, in __getitem__\\n    indexer = self.columns.get_loc(key)\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/indexes/base.py\\\", line 3819, in get_loc\\n    raise KeyError(key) from err\\nKeyError: 'Trạng thái'\", \"stdout\": \"week orders: 0 detail rows: 0\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/indexes/base.py\\\", line 3812, in get_loc\\n    return self._engine.get_loc(casted_key)\\n           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\\n  File \\\"pandas/_libs/index.pyx\\\", line 167, in pandas._libs.index.IndexEngine.get_loc\\n  File \\\"pandas/_libs/index.pyx\\\", line 196, in pandas._libs.index.IndexEngine.get_loc\\n  File \\n... [truncated 775 chars; filter/aggregate before printing] ...\\n_orig_df_getitem(self, key)\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\\\", line 4113, in __getitem__\\n    indexer = self.columns.get_loc(key)\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/indexes/base.py\\\", line 3819, in get_loc\\n    raise KeyError(key) from err\\nKeyError: 'Trạng thái'\", \"returncode\": 1, \"timeout\": false}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794769150234,
+        "end": 1794769150238
+      },
+      "full_result": {
+        "success": false,
+        "kind": "error",
+        "error_kind": "runtime_error",
+        "error": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/indexes/base.py\", line 3812, in get_loc\n    return self._engine.get_loc(casted_key)\n           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\n  File \"pandas/_libs/index.pyx\", line 167, in pandas._libs.index.IndexEngine.get_loc\n  File \"pandas/_libs/index.pyx\", line 196, in pandas._libs.index.IndexEngine.get_loc\n  File \"pandas/_libs/hashtable_class_helper.pxi\", line 7088, in pandas._libs.hashtable.PyObjectHashTable.get_item\n  File \"pandas/_libs/hashtable_class_helper.pxi\", line 7096, in pandas._libs.hashtable.PyObjectHashTable.get_item\nKeyError: 'Trạng thái'\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmp9pwe5dl1.py\", line 1038, in <module>\n    print(prod['Trạng thái'].value_counts())\n          ~~~~^^^^^^^^^^^^^^\n  File \"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_019ec94d9799/tmp9pwe5dl1.py\", line 677, in _bridge_df_getitem\n    return _bridge_orig_df_getitem(self, key)\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\", line 4113, in __getitem__\n    indexer = self.columns.get_loc(key)\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/indexes/base.py\", line 3819, in get_loc\n    raise KeyError(key) from err\nKeyError: 'Trạng thái'",
+        "stdout": "week orders: 0 detail rows: 0",
+        "stderr": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/indexes/base.py\", line 3812, in get_loc\n    return self._engine.get_loc(casted_key)\n           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\n  File \"pandas/_libs/index.pyx\", line 167, in pandas._libs.index.IndexEngine.get_loc\n  File \"pandas/_libs/index.pyx\", line 196, in pandas._libs.index.IndexEngine.get_loc\n  File \n... [truncated 775 chars; filter/aggregate before printing] ...\n_orig_df_getitem(self, key)\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\", line 4113, in __getitem__\n    indexer = self.columns.get_loc(key)\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/indexes/base.py\", line 3819, in get_loc\n    raise KeyError(key) from err\nKeyError: 'Trạng thái'",
+        "returncode": 1,
+        "timeout": false
+      }
+    }
+  ],
+  "api_errors": [],
+  "jsonl_parse_errors": [],
+  "raw_final_text": "",
+  "prediction": {
+    "id": "q_019ec94d9799",
+    "type": "abstain",
+    "answer": null
+  },
+  "type_source": "abstain",
+  "abstain_reason": "question_timeout",
+  "tool_succeeded_but_final_empty": false,
+  "tool_rescue_prediction": null,
+  "stderr": "Timeout after 600s"
+}

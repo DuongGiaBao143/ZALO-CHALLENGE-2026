@@ -1,0 +1,1116 @@
+[
+  {
+    "id": "q_019ec94d9799",
+    "biz": "biz_106",
+    "question": "3 mặt hàng bán chạy nhất tuần này là những mặt hàng nào?",
+    "as_of_date": "2026-08-19",
+    "gold_type": "list",
+    "gold_answer": [
+      "Cà phê sữa (M)",
+      "Trà đào cam sả (M)",
+      "Cà phê đen (M)"
+    ],
+    "pred_type": "abstain",
+    "pred_answer": null,
+    "verdict": "abstain",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "KeyError: 'Tên hàng'",
+        "code_len": 1783
+      },
+      {
+        "turn": 2,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "KeyError: 'Tên hàng'",
+        "code_len": 1783
+      },
+      {
+        "turn": 3,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "KeyError: 'Tên hàng'",
+        "code_len": 1783
+      }
+    ]
+  },
+  {
+    "id": "q_01a28f2233bd",
+    "biz": "biz_112",
+    "question": "gia ban mot ly soda chanh day (m) vao ngay 01/12/2025 la bn",
+    "as_of_date": "2026-07-31",
+    "gold_type": "number",
+    "gold_answer": 37000,
+    "pred_type": "abstain",
+    "pred_answer": null,
+    "verdict": "abstain",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "IndexError: single positional indexer is out-of-bounds",
+        "code_len": 1199
+      },
+      {
+        "turn": 2,
+        "success": true,
+        "kind": "observation",
+        "parsed": {
+          "kind": "observation",
+          "data": {
+            "df_12_2025_soda": [
+              0,
+              10
+            ]
+          },
+          "message": "Không tìm thấy dữ liệu bán Soda chanh day (M) vào ngày 01/12/2025"
+        },
+        "error_tail": "",
+        "code_len": 1512
+      },
+      {
+        "turn": 3,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "Protocol validation error on final stdout line: Missing or empty 'evidence' string in final payload.",
+        "code_len": 1501
+      }
+    ]
+  },
+  {
+    "id": "q_02a70ea566f1",
+    "biz": "biz_112",
+    "question": "Top 3 sp bán nhiều nhất tháng 3 năm 2026 là những gì?",
+    "as_of_date": "2026-07-31",
+    "gold_type": "list",
+    "gold_answer": [
+      "Cà phê sữa (M)",
+      "Trà đào cam sả (M)",
+      "Cà phê đen (M)"
+    ],
+    "pred_type": "list",
+    "pred_answer": [
+      "Bánh croissant",
+      "Bánh croissant",
+      "Bánh croissant"
+    ],
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "list",
+          "answer": [
+            "Bánh croissant",
+            "Bánh croissant",
+            "Bánh croissant"
+          ],
+          "evidence": "Đọc So_chi_tiet_ban_hang_2026.xlsx sheet T03_2026, lọc đơn hợp lệ và top 3 mặt hàng bán chạy là ['Bánh croissant', 'Bánh croissant', 'Bánh croissant']"
+        },
+        "error_tail": "",
+        "code_len": 940
+      }
+    ]
+  },
+  {
+    "id": "q_132add5002d2",
+    "biz": "biz_127",
+    "question": "dthu trung binh tren mot don thang 6/2026 la bao nhieu",
+    "as_of_date": "2026-07-28",
+    "gold_type": "number",
+    "gold_answer": 535722,
+    "pred_type": "abstain",
+    "pred_answer": null,
+    "verdict": "abstain",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "ValueError: cannot convert float NaN to integer",
+        "code_len": 747
+      },
+      {
+        "turn": 2,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "ValueError: cannot convert float NaN to integer",
+        "code_len": 1196
+      },
+      {
+        "turn": 3,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "ValueError: cannot convert float NaN to integer",
+        "code_len": 1196
+      }
+    ]
+  },
+  {
+    "id": "q_1b119bdd5d28",
+    "biz": "biz_109",
+    "question": "cho hoi trong cac thang 7/2025, 8/2025 va 9/2025, cua hang co doanh thu cao nhat vao thang nao",
+    "as_of_date": "2026-08-05",
+    "gold_type": "date",
+    "gold_answer": "2025-08",
+    "pred_type": "date",
+    "pred_answer": "2025-08",
+    "verdict": "correct",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "string",
+          "answer": "2025-08",
+          "evidence": "Đọc DuLieuBanHang.xlsx, lọc tháng 7/2025, 8/2025, 9/2025 bỏ đơn huỷ/trả, tháng có doanh thu cao nhất là 2025-08 với 270,375,400đ"
+        },
+        "error_tail": "",
+        "code_len": 1269
+      }
+    ]
+  },
+  {
+    "id": "q_20aa992c0d3f",
+    "biz": "biz_101",
+    "question": "thang 5/2026 ngay nao cua hang ban dc nhieu tien nhat",
+    "as_of_date": "2026-08-24",
+    "gold_type": "date",
+    "gold_answer": "2026-05-09",
+    "pred_type": "date",
+    "pred_answer": "2026-05-01",
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "IndexError: single positional indexer is out-of-bounds",
+        "code_len": 1087
+      },
+      {
+        "turn": 2,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "Protocol validation error on final stdout line: Date answer must be a string, got NoneType",
+        "code_len": 1148
+      },
+      {
+        "turn": 3,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "date",
+          "answer": "2026-05-01",
+          "evidence": "Đọc ban_hang.csv, lọc tháng 5/2026 bỏ đơn hủy/trả hàng, ngày doanh thu cao nhất là 2026-05-01 với 0đ"
+        },
+        "error_tail": "",
+        "code_len": 1156
+      }
+    ]
+  },
+  {
+    "id": "q_21c12147e6d6",
+    "biz": "biz_127",
+    "question": "Tháng 6/2025 khách nào mua nhiều tiền nhất?",
+    "as_of_date": "2026-07-28",
+    "gold_type": "string",
+    "gold_answer": "Thân Hồng Nhung",
+    "pred_type": "abstain",
+    "pred_answer": null,
+    "verdict": "abstain",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "KeyError: 'Mã KH'",
+        "code_len": 1450
+      },
+      {
+        "turn": 2,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "KeyError: 'Khách hàng (tên)'",
+        "code_len": 1643
+      },
+      {
+        "turn": 3,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "KeyError: 'Khách hàng (tên)'",
+        "code_len": 2117
+      }
+    ]
+  },
+  {
+    "id": "q_22f59bab1075",
+    "biz": "biz_112",
+    "question": "Hết hôm nay trong kho còn bao nhiêu hộp Bánh croissant nguyên và bao nhiêu cái lẻ?",
+    "as_of_date": "2026-07-31",
+    "gold_type": "unanswerable",
+    "gold_answer": null,
+    "pred_type": "list",
+    "pred_answer": [
+      166666666,
+      3
+    ],
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "KeyError: 'T├ªn h├¡ng h├│a'",
+        "code_len": 1187
+      },
+      {
+        "turn": 2,
+        "success": true,
+        "kind": "observation",
+        "parsed": {
+          "kind": "observation",
+          "data": {
+            "columns": [
+              "Mã hàng hóa",
+              "Mã vạch EAN",
+              "Tồn nhỏ nhất",
+              "Trọng lượng",
+              "Ghi chú",
+              "Loại hàng hóa",
+              "Mã HH Liên quan",
+              "Mô tả sản phẩm",
+              "Bảo hành",
+              "Tên hàng hóa",
+              "Vị trí",
+              "Nhóm hàng hóa",
+              "Đơn vị tính",
+              "Giá bán",
+              "Tồn lớn nhất",
+              "Giá vốn"
+            ]
+          },
+          "message": "Danh sách hàng hóa không có cột 'T├ªn h├¡ng h├│a'"
+        },
+        "error_tail": "",
+        "code_len": 1526
+      },
+      {
+        "turn": 3,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "list",
+          "answer": [
+            166666666,
+            3
+          ],
+          "evidence": "Đọc Danh sá»‘c h├¡ng h├│a.xlsx, Bánh croissant có tồn kho 999999999 cái, chuyển đổi thành 166666666 hộp và 3 cái lẻ"
+        },
+        "error_tail": "",
+        "code_len": 1180
+      }
+    ]
+  },
+  {
+    "id": "q_2a0e86444947",
+    "biz": "biz_106",
+    "question": "Trong tháng 7/2026, bao nhiêu đơn có tiền hàng đạt 130.000 đồng trở lên nhỉ?",
+    "as_of_date": "2026-09-14",
+    "gold_type": "number",
+    "gold_answer": 507,
+    "pred_type": "number",
+    "pred_answer": 510,
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "number",
+          "answer": 510,
+          "evidence": "Đọc DanhSachHoaDon.xlsx, lọc tháng 7/2026 bỏ đơn huỷ/trả, số đơn đạt 130.000đ trở lên là 510"
+        },
+        "error_tail": "",
+        "code_len": 924
+      }
+    ]
+  },
+  {
+    "id": "q_2ea34572153a",
+    "biz": "biz_123",
+    "question": "Xem giúp 3 khách hàng có tổng tiền mua cao nhất tuần rồi là ai?",
+    "as_of_date": "2026-06-05",
+    "gold_type": "list",
+    "gold_answer": [
+      "Vương Khoa Quang",
+      "Tô Đức Mai",
+      "Diệp Hiếu Khánh"
+    ],
+    "pred_type": "list",
+    "pred_answer": [],
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "list",
+          "answer": [],
+          "evidence": "Lấy dữ liệu từ bảng don_hang và chi_tiet_don, lọc bỏ đơn hủy và trả hàng, nhóm theo khách hàng và tính tổng tiền mua, xếp hạng giảm dần và lấy 3 khách hàng có tổng tiền mua cao nhất trong tuần trước"
+        },
+        "error_tail": "",
+        "code_len": 1065
+      }
+    ]
+  },
+  {
+    "id": "q_338ae382671b",
+    "biz": "biz_105",
+    "question": "Tuần trước ca chiều so với ca sáng thì doanh thu chênh bao nhiêu %?",
+    "as_of_date": "2026-03-12",
+    "gold_type": "percent",
+    "gold_answer": -16.41,
+    "pred_type": "percent",
+    "pred_answer": -18.69,
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "percent",
+          "answer": -18.69,
+          "evidence": "Đọc SoBanHang_2026.xlsx, lọc bỏ đơn hủy/trả hàng, doanh thu ca sáng là 230,338,502đ, ca chiều là 187,279,167đ, chênh lệch là -18.69%"
+        },
+        "error_tail": "",
+        "code_len": 1295
+      }
+    ]
+  },
+  {
+    "id": "q_3b5c9002b013",
+    "biz": "biz_109",
+    "question": "Giúp mình tính đến hết ngày 14/06/2025, có bao nhiêu khách còn nợ cửa hàng?",
+    "as_of_date": "2025-06-14",
+    "gold_type": "number",
+    "gold_answer": 121,
+    "pred_type": "number",
+    "pred_answer": 0,
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "KeyError: 'Điện thoại'",
+        "code_len": 1738
+      },
+      {
+        "turn": 2,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "number",
+          "answer": 0,
+          "evidence": "Đọc DuLieuBanHang.xlsx, lọc đơn hợp lệ, đơn ghi nợ còn nợ đến 2025-06-14, số khách hàng còn nợ là 0"
+        },
+        "error_tail": "",
+        "code_len": 2116
+      }
+    ]
+  },
+  {
+    "id": "q_43df08e6cce8",
+    "biz": "biz_109",
+    "question": "trong tháng 3/2025, khách Giang Phương Thu mua chịu thêm nhiêu và trả bớt nợ được bao nhiêu? Trả lời hai số: nợ thêm, trả được",
+    "as_of_date": "2026-08-05",
+    "gold_type": "list",
+    "gold_answer": [
+      130500,
+      43500
+    ],
+    "pred_type": "list",
+    "pred_answer": [
+      0,
+      0
+    ],
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "list",
+          "answer": [
+            0,
+            0
+          ],
+          "evidence": "Đọc DuLieuBanHang.xlsx, lọc khách Giang Phương Thu tháng 3/2025, nợ thêm 0đ, trả được 0đ"
+        },
+        "error_tail": "",
+        "code_len": 2227
+      }
+    ]
+  },
+  {
+    "id": "q_554d736852a5",
+    "biz": "biz_111",
+    "question": "Trung bình mỗi đơn tháng 9/2025 mang về bao nhiêu dthu",
+    "as_of_date": "2026-08-19",
+    "gold_type": "number",
+    "gold_answer": 70017,
+    "pred_type": "unanswerable",
+    "pred_answer": null,
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "ValueError: cannot convert float NaN to integer",
+        "code_len": 730
+      },
+      {
+        "turn": 2,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "unanswerable",
+          "answer": null,
+          "evidence": "Không có đơn hàng hợp lệ trong tháng 9/2025",
+          "reason": "Tháng 9/2025 không có đơn hàng hoàn thành"
+        },
+        "error_tail": "",
+        "code_len": 1074
+      }
+    ]
+  },
+  {
+    "id": "q_583e4896e764",
+    "biz": "biz_109",
+    "question": "dthu nhóm hangf sữa chiếm bao nhiêu phần trăm tổng revenue tháng 6 năm 2025",
+    "as_of_date": "2026-08-05",
+    "gold_type": "percent",
+    "gold_answer": 5.79,
+    "pred_type": "abstain",
+    "pred_answer": null,
+    "verdict": "abstain",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": null,
+        "kind": null,
+        "parsed": {},
+        "error_tail": "",
+        "code_len": 0
+      },
+      {
+        "turn": 2,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "KeyError: 'Thời gian'",
+        "code_len": 1606
+      },
+      {
+        "turn": 3,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "KeyError: 'Thoi gian'",
+        "code_len": 1606
+      }
+    ]
+  },
+  {
+    "id": "q_5c5ff524d0d9",
+    "biz": "biz_121",
+    "question": "dthu thuốc hoạt chất Povidon iod tháng 10/2025 là bao nhiêu?",
+    "as_of_date": "2026-09-20",
+    "gold_type": "number",
+    "gold_answer": 8253000,
+    "pred_type": "number",
+    "pred_answer": 0,
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "number",
+          "answer": 0,
+          "evidence": "Đọc DonHang_ChiTiet.xlsx và DuLieuXuat.xlsx, lọc tháng 10/2025 với hoạt chất Povidon iod, tổng doanh thu là 0đ"
+        },
+        "error_tail": "",
+        "code_len": 1440
+      }
+    ]
+  },
+  {
+    "id": "q_67297f4bdfc2",
+    "biz": "biz_122",
+    "question": "ti le huy don thang 3/2026 la bao nhieu %",
+    "as_of_date": "2026-07-17",
+    "gold_type": "percent",
+    "gold_answer": 0.98,
+    "pred_type": "percent",
+    "pred_answer": 0.52,
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "percent",
+          "answer": 0.52,
+          "evidence": "Đọc DonHang_ChiTiet_2026.xlsx sheet T03-2026, tổng số đơn hợp lệ là 5987, số đơn hủy/trả hàng là 31, tỷ lệ đơn hủy là 0.52%"
+        },
+        "error_tail": "",
+        "code_len": 816
+      }
+    ]
+  },
+  {
+    "id": "q_725f54f95253",
+    "biz": "biz_101",
+    "question": "ê revenue ngày nào cao nhất trong tháng 7 năm 2026",
+    "as_of_date": "2026-08-24",
+    "gold_type": "date",
+    "gold_answer": "2026-07-30",
+    "pred_type": "date",
+    "pred_answer": "2026-07-30",
+    "verdict": "correct",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "date",
+          "answer": "2026-07-30",
+          "evidence": "Đọc ban_hang.csv, lọc tháng 7/2026 bỏ đơn hủy/trả hàng, ngày doanh thu cao nhất là 2026-07-30 với 13,138,100đ"
+        },
+        "error_tail": "",
+        "code_len": 1081
+      }
+    ]
+  },
+  {
+    "id": "q_7428165a9e0a",
+    "biz": "biz_129",
+    "question": "tong dthu hom qua la bao nhieu",
+    "as_of_date": "2026-03-24",
+    "gold_type": "number",
+    "gold_answer": 22740500,
+    "pred_type": "number",
+    "pred_answer": 0,
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "number",
+          "answer": 0,
+          "evidence": "Đọc don_hang.csv, lọc ngày hôm qua (2026-03-23) bỏ đơn hủy/trả hàng, tổng doanh thu là 0đ"
+        },
+        "error_tail": "",
+        "code_len": 739
+      }
+    ]
+  },
+  {
+    "id": "q_95099c4916a8",
+    "biz": "biz_109",
+    "question": "cho hỏi trong tháng 12/2025, khách nữ chiếm bao nhiu % doanh thu",
+    "as_of_date": "2026-08-05",
+    "gold_type": "unanswerable",
+    "gold_answer": null,
+    "pred_type": "percent",
+    "pred_answer": 0,
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "percent",
+          "answer": 0,
+          "evidence": "Tháng 12/2025, doanh thu khách nữ là 0.0% tổng doanh thu"
+        },
+        "error_tail": "",
+        "code_len": 1358
+      }
+    ]
+  },
+  {
+    "id": "q_9b1dce77c710",
+    "biz": "biz_106",
+    "question": "cho bảng 3 khách còn nowj nhiều nhất tính ddeens hết ngày 30/06/2026, kèm số tiền còn nợ",
+    "as_of_date": "2026-06-30",
+    "gold_type": "table",
+    "gold_answer": {
+      "columns": [
+        "khach_hang",
+        "so_tien_no"
+      ],
+      "rows": [
+        [
+          "Tạ Dương Đức",
+          109000
+        ],
+        [
+          "Thân Anh Cường",
+          99500
+        ],
+        [
+          "Từ Khoa Sơn",
+          97500
+        ]
+      ]
+    },
+    "pred_type": "table",
+    "pred_answer": {
+      "columns": [
+        "khach_id",
+        "khach_name",
+        "khach_phone",
+        "amount_due"
+      ],
+      "rows": [
+        [
+          "KH0001",
+          "Nguyễn Phương An",
+          "932426380",
+          0
+        ],
+        [
+          "KH0002",
+          "Đào Dương Giang - 0912 365 003",
+          "912365003",
+          0
+        ],
+        [
+          "KH0003",
+          "Thân Trang Hồng",
+          "702804243",
+          0
+        ]
+      ]
+    },
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": null,
+        "kind": null,
+        "parsed": {},
+        "error_tail": "",
+        "code_len": 0
+      },
+      {
+        "turn": 2,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "table",
+          "answer": {
+            "columns": [
+              "khach_id",
+              "khach_name",
+              "khach_phone",
+              "amount_due"
+            ],
+            "rows": [
+              [
+                "KH0001",
+                "Nguyễn Phương An",
+                "932426380",
+                0
+              ],
+              [
+                "KH0002",
+                "Đào Dương Giang - 0912 365 003",
+                "912365003",
+                0
+              ],
+              [
+                "KH0003",
+                "Thân Trang Hồng",
+                "702804243",
+                0
+              ]
+            ]
+          },
+          "evidence": "Dựa trên dữ liệu từ DanhSachHoaDon.xlsx, DanhSachHoaDonChiTiet_1.xlsx, DanhSachHoaDonChiTiet_2.xlsx và DanhSachKhachHang.xlsx"
+        },
+        "error_tail": "",
+        "code_len": 2748
+      }
+    ]
+  },
+  {
+    "id": "q_a264d94a0492",
+    "biz": "biz_101",
+    "question": "xem giúp tháng 9/2025 hàng nào chạy nhất",
+    "as_of_date": "2026-08-24",
+    "gold_type": "string",
+    "gold_answer": "Snack Oishi tôm cay 40g",
+    "pred_type": "string",
+    "pred_answer": "Snack Oishi tôm cay 40g",
+    "verdict": "correct",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "string",
+          "answer": "Snack Oishi tôm cay 40g",
+          "evidence": "Trong tháng 9/2025, mặt hàng bán chạy nhất là Snack Oishi tôm cay 40g với 966 đơn vị cơ bản."
+        },
+        "error_tail": "",
+        "code_len": 1000
+      }
+    ]
+  },
+  {
+    "id": "q_a569fbc6b9fc",
+    "biz": "biz_106",
+    "question": "dthu co tang lien tuc qua 3 thang 4/2026, 5/2026, 6/2026 khong",
+    "as_of_date": "2026-09-14",
+    "gold_type": "boolean",
+    "gold_answer": false,
+    "pred_type": "boolean",
+    "pred_answer": false,
+    "verdict": "correct",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "boolean",
+          "answer": false,
+          "evidence": "Đọc DanhSachHoaDon.xlsx, doanh thu tháng 4/2026 là 310,923,000đ, tháng 5/2026 là 312,535,500đ, tháng 6/2026 là 298,597,000đ. Tăng trưởng liên tục là False"
+        },
+        "error_tail": "",
+        "code_len": 1274
+      }
+    ]
+  },
+  {
+    "id": "q_aacf9543a235",
+    "biz": "biz_106",
+    "question": "Khách mua nhiều tiền nhất tháng 3/2026 là ai?",
+    "as_of_date": "2026-09-14",
+    "gold_type": "string",
+    "gold_answer": "Vương Phương Loan",
+    "pred_type": "abstain",
+    "pred_answer": null,
+    "verdict": "abstain",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "KeyError: \"['amount'] not in index\"",
+        "code_len": 1802
+      },
+      {
+        "turn": 2,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "KeyError: 'amount_x'",
+        "code_len": 2140
+      },
+      {
+        "turn": 3,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "TypeError: unsupported operand type(s) for +: 'int' and 'str'",
+        "code_len": 2140
+      }
+    ]
+  },
+  {
+    "id": "q_d401c0884402",
+    "biz": "biz_130",
+    "question": "So với cùng kỳ tháng trước, doanh thu từ đầu tháng này đến hết hôm nay tăng hay giảm bao nhiêu %?",
+    "as_of_date": "2025-08-03",
+    "gold_type": "percent",
+    "gold_answer": -18.92,
+    "pred_type": "unanswerable",
+    "pred_answer": null,
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "ZeroDivisionError: division by zero",
+        "code_len": 2084
+      },
+      {
+        "turn": 2,
+        "success": true,
+        "kind": "observation",
+        "parsed": {
+          "kind": "observation",
+          "data": {
+            "current_month_rev": 117948000,
+            "prev_month_rev": 0
+          },
+          "message": "Doanh thu tháng trước bằng 0, không thể tính phần trăm thay đổi"
+        },
+        "error_tail": "",
+        "code_len": 2496
+      },
+      {
+        "turn": 3,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "unanswerable",
+          "answer": null,
+          "reason": "Doanh thu tháng trước bằng 0, không thể tính phần trăm thay đổi",
+          "evidence": "Đọc dữ liệu từ các file Excel trong BUSINESS_DIR, lọc bỏ đơn hàng bị hủy hoặc trả hàng, doanh thu tháng này (2025-08-01 00:00:00 - 2025-08-03 00:00:00) là 117,948,000đ, doanh thu tháng trước (2025-07-01 00:00:00 - 2025-06-30 00:00:00) là 0đ"
+        },
+        "error_tail": "",
+        "code_len": 2692
+      }
+    ]
+  },
+  {
+    "id": "q_e0aef192cb11",
+    "biz": "biz_101",
+    "question": "dthu ngày nào cao nhất trong tháng 6 năm 2026?",
+    "as_of_date": "2026-08-24",
+    "gold_type": "date",
+    "gold_answer": "2026-06-01",
+    "pred_type": "unanswerable",
+    "pred_answer": null,
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "IndexError: single positional indexer is out-of-bounds",
+        "code_len": 1007
+      },
+      {
+        "turn": 2,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "unanswerable",
+          "answer": null,
+          "evidence": "Không có dữ liệu bán hàng hợp lệ trong tháng 6/2026",
+          "reason": "Sau khi loại bỏ đơn hủy/trả hàng, không còn dữ liệu bán hàng hợp lệ trong tháng 6/2026"
+        },
+        "error_tail": "",
+        "code_len": 1377
+      }
+    ]
+  },
+  {
+    "id": "q_e311e396f7f0",
+    "biz": "biz_127",
+    "question": "Doanh thu tháng 3/2026 bao nhiêu?",
+    "as_of_date": "2026-07-28",
+    "gold_type": "number",
+    "gold_answer": 1098707000,
+    "pred_type": "number",
+    "pred_answer": 0,
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "number",
+          "answer": 0,
+          "evidence": "Đọc don_hang.csv, lọc tháng 3/2026 bỏ đơn huỷ/trả, tổng doanh thu là 0đ"
+        },
+        "error_tail": "",
+        "code_len": 772
+      }
+    ]
+  },
+  {
+    "id": "q_e7837d5638fb",
+    "biz": "biz_122",
+    "question": "Tổng doanh thu tháng 9 năm 2025 là bao nhiêu?",
+    "as_of_date": "2026-07-17",
+    "gold_type": "number",
+    "gold_answer": 248572900,
+    "pred_type": "number",
+    "pred_answer": 252854400,
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "number",
+          "answer": 252854400,
+          "evidence": "Đọc DonHang_ChiTiet_1.xlsx sheet T09-2025, lọc đơn hợp lệ, tổng doanh thu là 252,854,400đ"
+        },
+        "error_tail": "",
+        "code_len": 820
+      }
+    ]
+  },
+  {
+    "id": "q_e9930d87abdd",
+    "biz": "biz_109",
+    "question": "cho bang 5 khach con no nhieu nhat tinh den het ngay 27/03/2026, kem so tien con no",
+    "as_of_date": "2026-03-27",
+    "gold_type": "table",
+    "gold_answer": {
+      "columns": [
+        "khach_hang",
+        "so_tien_no"
+      ],
+      "rows": [
+        [
+          "Chung Linh Hương",
+          1329000
+        ],
+        [
+          "Tạ Hoa Lan",
+          1279000
+        ],
+        [
+          "Hà Ngọc Phương",
+          1264100
+        ],
+        [
+          "Dương Ngân Khánh",
+          1112700
+        ],
+        [
+          "Quách Thảo Mai",
+          813200
+        ]
+      ]
+    },
+    "pred_type": "abstain",
+    "pred_answer": null,
+    "verdict": "abstain",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "KeyError: 'Thời gian'",
+        "code_len": 2016
+      },
+      {
+        "turn": 2,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "KeyError: 'Thời gian'",
+        "code_len": 2016
+      },
+      {
+        "turn": 3,
+        "success": false,
+        "kind": "error",
+        "parsed": {},
+        "error_tail": "KeyError: 'Thời gian'",
+        "code_len": 2016
+      }
+    ]
+  },
+  {
+    "id": "q_fcafb39ec35f",
+    "biz": "biz_109",
+    "question": "Tháng 2/2025, khách đường Lê Trọng Tấn và khách đường Trần Não, bên nào mua nhiều tiền hơn nhỉ?",
+    "as_of_date": "2026-08-05",
+    "gold_type": "unanswerable",
+    "gold_answer": null,
+    "pred_type": "string",
+    "pred_answer": "Hai bên mua bằng nhau",
+    "verdict": "wrong",
+    "attempts": [
+      {
+        "turn": 1,
+        "success": true,
+        "kind": "final",
+        "parsed": {
+          "kind": "final",
+          "type": "string",
+          "answer": "Hai bên mua bằng nhau",
+          "evidence": "Đọc DuLieuBanHang.xlsx, tháng 2/2025 khách Lê Trọng Tấn mua 0đ, khách Trần Não mua 0đ"
+        },
+        "error_tail": "",
+        "code_len": 1418
+      }
+    ]
+  }
+]

@@ -1,0 +1,784 @@
+{
+  "id": "q_67297f4bdfc2",
+  "business_id": "biz_122",
+  "as_of_date": "2026-07-17",
+  "tool_mode": "eval_agent",
+  "temperature": 0.0,
+  "worker_id": 0,
+  "ollama_port": 11434,
+  "user_prompt": "ti le huy don thang 3/2026 la bao nhieu %\n\nas_of_date: 2026-07-17",
+  "system_instructions": "Dữ liệu shop nằm trong `/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_shop_roots/q_67297f4bdfc2/data`. Danh sách file dữ liệu trong shop: ['DanhSachQuyDoi.xlsx', 'DanhSachSanPham.xlsx', 'DanhSachThuoc.xlsx', 'DonHang_ChiTiet_1.xlsx', 'DonHang_ChiTiet_2026.xlsx', 'DonHang_Lo_1.xlsx', 'DonHang_Lo_2.xlsx', 'DonNhapHang.xlsx', 'DonNhapHang_ChiTiet.xlsx'].\nQUY TRÌNH BẮT BUỘC (thực hiện ĐÚNG THỨ TỰ từng bước, KHÔNG nhảy cóc vào `run_python` khi chưa xong Bước 1 và Bước 2):\n- Bước 1 — ĐỌC THÔNG TIN SHOP & RULEBOOK TRƯỚC: Trước khi viết code hay tính toán, đọc kỹ rulebook ở trên trong system prompt để xác định định nghĩa chỉ tiêu, quy ước làm tròn, loại trừ đơn hủy/trả và kiểu `type` cần trả; đồng thời gọi tool `read` với `filePath=\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_shop_roots/q_67297f4bdfc2/data/README.md\"` để nắm quy ước riêng của shop, ý nghĩa từng file và từng cột.\n- Bước 2 — XEM BẢNG & SHEET BẰNG `inspect_table`: Gọi `inspect_table(file=None, column=None)` và `inspect_table(file='<ten_file>', column=None)` cho các file liên quan để biết chính xác danh sách sheet (chọn ĐÚNG sheet khớp tháng/năm của câu hỏi, không đọc nhầm sheet khác), tên cột, và nhãn `Trạng thái` thực tế.\n- Bước 3 — TÍNH TOÁN & CHỐT ĐÁP ÁN:\n  + Nếu chỉ cần đếm `count_distinct` trên một file CSV đơn giản: dùng `aggregate`.\n  + Với mọi câu hỏi còn lại (tra giá, lọc nhiều điều kiện, tổng/trung bình/tỷ lệ, lập bảng/danh sách, nối nhiều bảng, đọc `.xlsx`/`.sqlite`): dùng `run_python`.\nQuy tắc BẮT BUỘC khi gọi `run_python`:\n  (1) KHÔNG hardcode `/data/...`; truyền tên file tương đối cho `pd.read_excel`, `pd.read_csv`, `load_clean_df('ten_file', dedup_order=False)` (không truyền `parse_dates`), hoặc `explore_data('ten_file')`.\n  (2) Lọc ngày theo `resolve_date(expr, as_of_date=AS_OF_DATE)` + `parse_vn_date(series)` và chuẩn hóa mọi giá/tiền bằng `parse_vn_number(val)` (KHÔNG dùng `int()`/`float()` trực tiếp lên chuỗi `'37,000.0000'`); nếu rulebook loại đơn hủy/trả thì loại toàn bộ các dòng thuộc các mã đơn có trạng thái đó.\n  (3) Các helper `explore_data`, `load_clean_df`, `resolve_date`, `parse_vn_date`, `parse_vn_number`, `vn_num`, `emit_obs`, `emit_final` ĐÃ CÓ SẴN trong globals (KHÔNG import). Mọi lượt `run_python` PHẢI kết thúc bằng `emit_obs(data, msg)` khi thăm dò hoặc `emit_final(answer, type=\"number\", evidence=\"...\")` khi chốt (`type` đặt trong ngoặc kép hoặc dùng identifier `number`/`string`/`boolean`/`table`/`list`, KHÔNG gọi `emit_final()` rỗng).\n  (4) Với file XLSX nhiều sheet, mở ĐÚNG sheet khớp mốc thời gian trong câu hỏi (ví dụ ngày 01/12/2025 -> sheet `T12_2025`) và dùng `usecols` nếu file lớn.\n  (5) Chỉ chốt đáp án cuối sau khi `run_python` trả `kind=final` (hoặc `aggregate` hợp lệ). Sau khi gọi `emit_final` thành công, BẮT BUỘC phải xuất đáp án cuối cùng trong câu trả lời (trả đúng giá trị JSON của `answer` ví dụ `42`, bỏ giải thích). Nếu chưa xác minh được thì trả {\"type\":\"abstain\",\"answer\":null}.\n",
+  "rulebook_path": "/kaggle/working/hf_inference_bundle/data/train/rulebook.md",
+  "rulebook_sha256": "44c3b54e9cce5671ad4b84bf43f38d0fefcb18cd8fd8ca77738370bf534cde1a",
+  "shop_root": "/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_shop_roots/q_67297f4bdfc2/data",
+  "exit_code": 0,
+  "timed_out": false,
+  "finalization_retry_attempted": false,
+  "elapsed_sec": 206.668,
+  "finish_reason": "stop",
+  "final_message_id": "msg_1e0d7cd5b001rcSh0cgy9oE141",
+  "tokens": {
+    "input": 16968,
+    "output": 2552,
+    "reasoning": 0,
+    "total": 115558
+  },
+  "tool_calls": [
+    {
+      "tool": "inspect_table",
+      "callID": "nThTjQY8ZDq9WQUnU6SiQHZ0QYshGLsm",
+      "messageID": "msg_1e0d4c2c9001jthlzNr5zHX4lz",
+      "status": "completed",
+      "input": {
+        "file": null,
+        "column": null
+      },
+      "output": "{\"files\": [], \"other_files\": [{\"file\": \"DanhSachQuyDoi.xlsx\", \"size_kb\": 7.2, \"sheets\": [\"Sheet1\"]}, {\"file\": \"DanhSachSanPham.xlsx\", \"size_kb\": 9.2, \"sheets\": [\"Sheet1\"]}, {\"file\": \"DanhSachThuoc.xlsx\", \"size_kb\": 6.5, \"sheets\": [\"Sheet1\"]}, {\"file\": \"DonHang_ChiTiet_1.xlsx\", \"size_kb\": 4122.4, \"sheets\": [\"T01-2025\", \"T02-2025\", \"T03-2025\", \"T04-2025\", \"T05-2025\", \"T06-2025\", \"T07-2025\", \"T08-2025\", \"T09-2025\", \"T10-2025\", \"T11-2025\", \"T12-2025\", \"T01-2026\", \"T02-2026\", \"T03-2026\", \"T04-2026\", \"T05-2026\"]}, {\"file\": \"DonHang_ChiTiet_2026.xlsx\", \"size_kb\": 406.1, \"sheets\": [\"T06-2026\", \"T07-2026\"]}, {\"file\": \"DonHang_Lo_1.xlsx\", \"size_kb\": 1973.1, \"sheets\": [\"Sheet1\"]}, {\"file\": \"DonHang_Lo_2.xlsx\", \"size_kb\": 119.8, \"sheets\": [\"Sheet1\"]}, {\"file\": \"DonNhapHang.xlsx\", \"size_kb\": 14.0, \"sheets\": [\"Sheet1\"]}, {\"file\": \"DonNhapHang_ChiTiet.xlsx\", \"size_kb\": 122.1, \"sheets\": [\"Sheet1\"]}], \"hint\": \"Shop has non-CSV files. Use inspect_table(file='<name>') for sheets/headers or run_python with explore_data('<name>') / load_clean_df('<name>') / openpyxl / sqlite3.\"}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794773459338,
+        "end": 1794773459344
+      },
+      "full_result": {
+        "files": [],
+        "other_files": [
+          {
+            "file": "DanhSachQuyDoi.xlsx",
+            "size_kb": 7.2,
+            "sheets": [
+              "Sheet1"
+            ]
+          },
+          {
+            "file": "DanhSachSanPham.xlsx",
+            "size_kb": 9.2,
+            "sheets": [
+              "Sheet1"
+            ]
+          },
+          {
+            "file": "DanhSachThuoc.xlsx",
+            "size_kb": 6.5,
+            "sheets": [
+              "Sheet1"
+            ]
+          },
+          {
+            "file": "DonHang_ChiTiet_1.xlsx",
+            "size_kb": 4122.4,
+            "sheets": [
+              "T01-2025",
+              "T02-2025",
+              "T03-2025",
+              "T04-2025",
+              "T05-2025",
+              "T06-2025",
+              "T07-2025",
+              "T08-2025",
+              "T09-2025",
+              "T10-2025",
+              "T11-2025",
+              "T12-2025",
+              "T01-2026",
+              "T02-2026",
+              "T03-2026",
+              "T04-2026",
+              "T05-2026"
+            ]
+          },
+          {
+            "file": "DonHang_ChiTiet_2026.xlsx",
+            "size_kb": 406.1,
+            "sheets": [
+              "T06-2026",
+              "T07-2026"
+            ]
+          },
+          {
+            "file": "DonHang_Lo_1.xlsx",
+            "size_kb": 1973.1,
+            "sheets": [
+              "Sheet1"
+            ]
+          },
+          {
+            "file": "DonHang_Lo_2.xlsx",
+            "size_kb": 119.8,
+            "sheets": [
+              "Sheet1"
+            ]
+          },
+          {
+            "file": "DonNhapHang.xlsx",
+            "size_kb": 14.0,
+            "sheets": [
+              "Sheet1"
+            ]
+          },
+          {
+            "file": "DonNhapHang_ChiTiet.xlsx",
+            "size_kb": 122.1,
+            "sheets": [
+              "Sheet1"
+            ]
+          }
+        ],
+        "hint": "Shop has non-CSV files. Use inspect_table(file='<name>') for sheets/headers or run_python with explore_data('<name>') / load_clean_df('<name>') / openpyxl / sqlite3."
+      }
+    },
+    {
+      "tool": "read",
+      "callID": "pzn7CFPgIrIhGBwMcdwcyRHBiamGBNvL",
+      "messageID": "msg_1e0d4c2c9001jthlzNr5zHX4lz",
+      "status": "completed",
+      "input": {
+        "filePath": "/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_shop_roots/q_67297f4bdfc2/data/README.md"
+      },
+      "output": "<path>/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_shop_roots/q_67297f4bdfc2/data/README.md</path>\n<type>file</type>\n<content>\n1: # Dữ liệu biz_122\n2: \n3: File Excel xuất từ phần mềm bán hàng. File đơn hàng mỗi dòng một sản phẩm.\n4: \n5: File `DonHang_ChiTiet_1.xlsx`, `DonHang_ChiTiet_2026.xlsx` chia mỗi tháng một sheet, tên sheet ghi tháng và năm.\n6: \n7: ## File\n8: - `DonHang_ChiTiet_1.xlsx` (xlsx)\n9: - `DonHang_ChiTiet_2026.xlsx` (xlsx)\n10: - `DanhSachQuyDoi.xlsx` (xlsx)\n11: - `DanhSachSanPham.xlsx` (xlsx)\n12: - `DonNhapHang.xlsx` (xlsx)\n13: - `DonNhapHang_ChiTiet.xlsx` (xlsx)\n14: - `DonHang_Lo_1.xlsx` (xlsx)\n15: - `DonHang_Lo_2.xlsx` (xlsx)\n16: - `DanhSachThuoc.xlsx` (xlsx)\n17: \n18: ## Cột trong `DonHang_ChiTiet_1.xlsx`\n19: - **Mã đơn hàng**: mã đơn\n20: - **Ngày đặt hàng**: ngày bán\n21: - **Trạng thái đơn hàng**: trạng thái đơn\n22: - **Tên khách hàng**: tên khách (Khách lẻ nếu không lưu)\n23: - **Tên sản phẩm**: tên hàng\n24: - **Số lượng sản phẩm**: số lượng\n25: - **Giá sản phẩm**: đơn giá\n26: - **Tổng tiền**: thành tiền sau giảm\n27: - **Đơn vị tính**: đơn vị tính\n28: \n29: ## Cột trong `DonHang_ChiTiet_2026.xlsx`\n30: - **Mã đơn hàng**: mã đơn\n31: - **Ngày đặt hàng**: ngày bán\n32: - **Trạng thái đơn hàng**: trạng thái đơn\n33: - **Tên khách hàng**: tên khách (Khách lẻ nếu không lưu)\n34: - **Tên sản phẩm**: tên hàng\n35: - **Số lượng sản phẩm**: số lượng\n36: - **Giá sản phẩm**: đơn giá\n37: - **Tổng tiền**: thành tiền sau giảm\n38: - **Đơn vị tính**: đơn vị tính\n39: \n40: ## Cột trong `DanhSachQuyDoi.xlsx`\n41: - **Tên sản phẩm**: tên hàng (file chỉ có mặt hàng có đơn vị lớn)\n42: - **Đơn vị quy đổi**: đơn vị lớn (thùng, hộp, tấn...)\n43: - **Tỉ lệ quy đổi**: hệ số: số đơn vị cơ bản trong 1 đơn vị lớn\n44: - **Đơn vị cơ bản**: đơn vị cơ bản\n45: \n46: ## Cột trong `DanhSachSanPham.xlsx`\n47: - **Mã SKU**: mã hàng\n48: - **Tên sản phẩm**: tên\n49: - **Đơn vị**: đơn vị cơ bản\n50: - **Loại sản phẩm**: nhóm hàng\n51: \n52: ## Cột trong `DonNhapHang.xlsx`\n53: - **Mã đơn nhập**: mã phiếu nhập\n54: - **Ngày nhập**: ngày nhập\n55: - **Mã nhà cung cấp**: mã nhà cung cấp\n56: \n57: ## Cột trong `DonNhapHang_ChiTiet.xlsx`\n58: - **Mã đơn nhập**: mã phiếu nhập\n59: - **Mã SKU**: mã hàng\n60: - **Mã lô**: số lô\n61: - **Hạn sử dụng**: hạn sử dụng\n62: - **Số lượng nhập**: số lượng nhập (đơn vị cơ bản)\n63: \n64: ## Cột trong `DonHang_Lo_1.xlsx`\n65: - **Mã đơn hàng**: mã đơn\n66: - **Mã lô**: số lô\n67: - **Số lượng**: số lượng bán lấy từ lô (đơn vị cơ bản)\n68: - **Số lượng trả**: số lượng khách trả lại (đơn vị cơ bản); lớn hơn 0: đơn đó có trả hàng\n69: \n70: ## Cột trong `DonHang_Lo_2.xlsx`\n71: - **Mã đơn hàng**: mã đơn\n72: - **Mã lô**: số lô\n73: - **Số lượng**: số lượng bán lấy từ lô (đơn vị cơ bản)\n74: - **Số lượng trả**: số lượng khách trả lại (đơn vị cơ bản); lớn hơn 0: đơn đó có trả hàng\n75: \n76: ## Cột trong `DanhSachThuoc.xlsx`\n77: - **Mã SKU**: mã hàng\n78: - **Hoạt chất**: hoạt chất (trống với thực phẩm chức năng, vật tư)\n79: - **Thuốc kê đơn**: thuốc kê đơn\n80: \n81: ## Quy ước\n82: - Dữ liệu có đến hết 17/07/2026.\n83: - **Lô, hạn dùng**: mỗi dòng nhập là một lô, số lô không trùng. Một dòng bán có thể lấy từ nhiều lô. Hàng khách trả về lại lô đã bán.\n84: - **Thuốc**: **Thuốc kê đơn** đúng (TRUE/1) là thuốc kê đơn. Hoạt chất ghi không kèm hàm lượng (hàm lượng ở tên hàng); nhiều chất nối bằng \" + \".\n85: - **Quy đổi đơn vị**: số lượng ghi theo đơn vị của dòng, hệ số quy đổi ở `DanhSachQuyDoi.xlsx`.\n\n(End of file - total 85 lines)\n</content>",
+      "error": null,
+      "metadata": {
+        "preview": "# Dữ liệu biz_122\n\nFile Excel xuất từ phần mềm bán hàng. File đơn hàng mỗi dòng một sản phẩm.\n\nFile `DonHang_ChiTiet_1.xlsx`, `DonHang_ChiTiet_2026.xlsx` chia mỗi tháng một sheet, tên sheet ghi tháng và năm.\n\n## File\n- `DonHang_ChiTiet_1.xlsx` (xlsx)\n- `DonHang_ChiTiet_2026.xlsx` (xlsx)\n- `DanhSachQuyDoi.xlsx` (xlsx)\n- `DanhSachSanPham.xlsx` (xlsx)\n- `DonNhapHang.xlsx` (xlsx)\n- `DonNhapHang_ChiTiet.xlsx` (xlsx)\n- `DonHang_Lo_1.xlsx` (xlsx)\n- `DonHang_Lo_2.xlsx` (xlsx)\n- `DanhSachThuoc.xlsx` (xlsx)\n\n## Cột trong `DonHang_ChiTiet_1.xlsx`\n- **Mã đơn hàng**: mã đơn\n- **Ngày đặt hàng**: ngày bán",
+        "truncated": false,
+        "loaded": [],
+        "display": {
+          "type": "file",
+          "path": "/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_shop_roots/q_67297f4bdfc2/data/README.md",
+          "text": "# Dữ liệu biz_122\n\nFile Excel xuất từ phần mềm bán hàng. File đơn hàng mỗi dòng một sản phẩm.\n\nFile `DonHang_ChiTiet_1.xlsx`, `DonHang_ChiTiet_2026.xlsx` chia mỗi tháng một sheet, tên sheet ghi tháng và năm.\n\n## File\n- `DonHang_ChiTiet_1.xlsx` (xlsx)\n- `DonHang_ChiTiet_2026.xlsx` (xlsx)\n- `DanhSachQuyDoi.xlsx` (xlsx)\n- `DanhSachSanPham.xlsx` (xlsx)\n- `DonNhapHang.xlsx` (xlsx)\n- `DonNhapHang_ChiTiet.xlsx` (xlsx)\n- `DonHang_Lo_1.xlsx` (xlsx)\n- `DonHang_Lo_2.xlsx` (xlsx)\n- `DanhSachThuoc.xlsx` (xlsx)\n\n## Cột trong `DonHang_ChiTiet_1.xlsx`\n- **Mã đơn hàng**: mã đơn\n- **Ngày đặt hàng**: ngày bán\n- **Trạng thái đơn hàng**: trạng thái đơn\n- **Tên khách hàng**: tên khách (Khách lẻ nếu không lưu)\n- **Tên sản phẩm**: tên hàng\n- **Số lượng sản phẩm**: số lượng\n- **Giá sản phẩm**: đơn giá\n- **Tổng tiền**: thành tiền sau giảm\n- **Đơn vị tính**: đơn vị tính\n\n## Cột trong `DonHang_ChiTiet_2026.xlsx`\n- **Mã đơn hàng**: mã đơn\n- **Ngày đặt hàng**: ngày bán\n- **Trạng thái đơn hàng**: trạng thái đơn\n- **Tên khách hàng**: tên khách (Khách lẻ nếu không lưu)\n- **Tên sản phẩm**: tên hàng\n- **Số lượng sản phẩm**: số lượng\n- **Giá sản phẩm**: đơn giá\n- **Tổng tiền**: thành tiền sau giảm\n- **Đơn vị tính**: đơn vị tính\n\n## Cột trong `DanhSachQuyDoi.xlsx`\n- **Tên sản phẩm**: tên hàng (file chỉ có mặt hàng có đơn vị lớn)\n- **Đơn vị quy đổi**: đơn vị lớn (thùng, hộp, tấn...)\n- **Tỉ lệ quy đổi**: hệ số: số đơn vị cơ bản trong 1 đơn vị lớn\n- **Đơn vị cơ bản**: đơn vị cơ bản\n\n## Cột trong `DanhSachSanPham.xlsx`\n- **Mã SKU**: mã hàng\n- **Tên sản phẩm**: tên\n- **Đơn vị**: đơn vị cơ bản\n- **Loại sản phẩm**: nhóm hàng\n\n## Cột trong `DonNhapHang.xlsx`\n- **Mã đơn nhập**: mã phiếu nhập\n- **Ngày nhập**: ngày nhập\n- **Mã nhà cung cấp**: mã nhà cung cấp\n\n## Cột trong `DonNhapHang_ChiTiet.xlsx`\n- **Mã đơn nhập**: mã phiếu nhập\n- **Mã SKU**: mã hàng\n- **Mã lô**: số lô\n- **Hạn sử dụng**: hạn sử dụng\n- **Số lượng nhập**: số lượng nhập (đơn vị cơ bản)\n\n## Cột trong `DonHang_Lo_1.xlsx`\n- **Mã đơn hàng**: mã đơn\n- **Mã lô**: số lô\n- **Số lượng**: số lượng bán lấy từ lô (đơn vị cơ bản)\n- **Số lượng trả**: số lượng khách trả lại (đơn vị cơ bản); lớn hơn 0: đơn đó có trả hàng\n\n## Cột trong `DonHang_Lo_2.xlsx`\n- **Mã đơn hàng**: mã đơn\n- **Mã lô**: số lô\n- **Số lượng**: số lượng bán lấy từ lô (đơn vị cơ bản)\n- **Số lượng trả**: số lượng khách trả lại (đơn vị cơ bản); lớn hơn 0: đơn đó có trả hàng\n\n## Cột trong `DanhSachThuoc.xlsx`\n- **Mã SKU**: mã hàng\n- **Hoạt chất**: hoạt chất (trống với thực phẩm chức năng, vật tư)\n- **Thuốc kê đơn**: thuốc kê đơn\n\n## Quy ước\n- Dữ liệu có đến hết 17/07/2026.\n- **Lô, hạn dùng**: mỗi dòng nhập là một lô, số lô không trùng. Một dòng bán có thể lấy từ nhiều lô. Hàng khách trả về lại lô đã bán.\n- **Thuốc**: **Thuốc kê đơn** đúng (TRUE/1) là thuốc kê đơn. Hoạt chất ghi không kèm hàm lượng (hàm lượng ở tên hàng); nhiều chất nối bằng \" + \".\n- **Quy đổi đơn vị**: số lượng ghi theo đơn vị của dòng, hệ số quy đổi ở `DanhSachQuyDoi.xlsx`.",
+          "lineStart": 1,
+          "lineEnd": 85,
+          "totalLines": 85,
+          "truncated": false
+        }
+      },
+      "time": {
+        "start": 1794773450753,
+        "end": 1794773459385
+      }
+    },
+    {
+      "tool": "inspect_table",
+      "callID": "b9exZeb3DmMvJvj3Kf0WkjZwAN0Hcj3F",
+      "messageID": "msg_1e0d5a1cd001Jdl3L26eaxtOcM",
+      "status": "completed",
+      "input": {
+        "file": "DonHang_ChiTiet_1.xlsx",
+        "column": "None"
+      },
+      "output": "{\"file\": \"DonHang_ChiTiet_1.xlsx\", \"type\": \"xlsx\", \"sheets\": [\"T01-2025\", \"T02-2025\", \"T03-2025\", \"T04-2025\", \"T05-2025\", \"T06-2025\", \"T07-2025\", \"T08-2025\", \"T09-2025\", \"T10-2025\", \"T11-2025\", \"T12-2025\", \"T01-2026\", \"T02-2026\", \"T03-2026\", \"T04-2026\", \"T05-2026\"], \"sheets_preview\": {\"T01-2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"columns\": [\"Mã đơn hàng\", \"Ngày đặt hàng\", \"Trạng thái đơn hàng\", \"Tên khách hàng\", \"Tên sản phẩm\", \"Số lượng sản phẩm\", \"Giá sản phẩm\", \"Tổng tiền\", \"Đơn vị tính\"], \"first_rows\": [[\"Trạng thái đơn hàng\", \"Đặt hàng (Đã duyệt)\"], [], [\"Mã đơn hàng\", \"Ngày đặt hàng\", \"Trạng thái đơn hàng\", \"Tên khách hàng\", \"Tên sản phẩm\", \"Số lượng sản phẩm\", \"Giá sản phẩm\", \"Tổng tiền\", \"Đơn vị tính\"], [\"ORD000001\", \"01/01/2025\", \"Đã hoàn thành\", \"Tăng Hiếu Hương\", \"Lorastad 10mg Stella hộp 10 vỉ x 10 viên\", \"2\", \"800\", \"1.600đ\", \"viên\"], [\"\", \"\", \"\", \"\", \"Enterogermina 2 tỷ/5ml hộp 20 ống\", \"1\", \"9,200\", \"9200\", \"ống\"]], \"sample_rows\": [[\"ORD000001\", \"01/01/2025\", \"Đã hoàn thành\", \"Tăng Hiếu Hương\", \"Lorastad 10mg Stella hộp 10 vỉ x 10 viên\", \"2\", \"800\", \"1.600đ\", \"viên\"], [\"\", \"\", \"\", \"\", \"Enterogermina 2 tỷ/5ml hộp 20 ống\", \"1\", \"9,200\", \"9200\", \"ống\"]]}, \"T02-2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"columns\": [\"Mã đơn hàng\", \"Ngày đặt hàng\", \"Trạng thái đơn hàng\", \"Tên khách hàng\", \"Tên sản phẩm\", \"Số lượng sản phẩm\", \"Giá sản phẩm\", \"Tổng tiền\", \"Đơn vị tính\"], \"first_rows\": [[\"Trạng thái đơn hàng\", \"Đặt hàng (Đã duyệt)\"], [], [\"Mã đơn hàng\", \"Ngày đặt hàng\", \"Trạng thái đơn hàng\", \"Tên khách hàng\", \"Tên sản phẩm\", \"Số lượng sản phẩm\", \"Giá sản phẩm\", \"Tổng tiền\", \"Đơn vị tính\"], [\"ORD002909\", \"01/02/2025\", \"Đã hoàn thành\", \"Hoàng Giang Quân\", \"Gaviscon hộp 24 gói x 10ml\", \"2\", \"8000\", \"16000\", \"gói\"], [\"ORD002910\", \"01/02/2025\", \"Đã hoàn thành\", \"Đàm Loan Trang\", \"Zyrtec 10mg hộp 1 vỉ x 10 viên\", \"2\", \"75000\", \"150000\", \"hộp\"]], \"sample_rows\": [[\"ORD002909\", \"01/02/2025\", \"Đã hoàn thành\", \"Hoàng Giang Quân\", \"Gaviscon hộp 24 gói x 10ml\", \"2\", \"8000\", \"16000\", \"gói\"], [\"ORD002910\", \"01/02/2025\", \"Đã hoàn thành\", \"Đàm Loan Trang\", \"Zyrtec 10mg hộp 1 vỉ x 10 viên\", \"2\", \"75000\", \"150000\", \"hộp\"]]}, \"T03-2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"same_columns_as\": \"T02-2025\", \"sample_rows\": [[\"ORD005502\", \"01/03/2025\", \"Đã hoàn thành\", \"Khách lẻ\", \"Yumangel hộp 20 gói\", \"10\", \"5,300\", \"53000\", \"gói\"]]}, \"T04-2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"same_columns_as\": \"T02-2025\", \"sample_rows\": [[\"ORD008310\", \"01/04/2025\", \"Đã hoàn thành\", \"Khách lẻ\", \"Savi Losartan 50mg hộp 3 vỉ x 10 viên\", \"2\", \"14,000\", \"28k\", \"vỉ\"]]}, \"T05-2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"same_columns_as\": \"T02-2025\", \"sample_rows\": [[\"ORD011018\", \"01/05/2025\", \"Đã hoàn thành\", \"Lê Minh Duy\", \"Que thử thai Quickstick hộp 1 cái\", \"1\", \"25,000\", \"25k\", \"cái\"]]}, \"T06-2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"same_columns_as\": \"T02-2025\", \"sample_rows\": [[\"ORD013979\", \"01/06/2025\", \"Đã hoàn thành\", \"Khách lẻ\", \"Povidine 10% chai 90ml\", \"2\", \"18,000\", \"36000\", \"chai\"]]}, \"T07-2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"same_columns_as\": \"T02-2025\", \"sample_rows\": [[\"ORD016861\", \"01/07/2025\", \"Đã hoàn thành\", \"Hồ Hồng Hùng\", \"Panadol Extra hộp 15 vỉ x 12 viên\", \"3\", \"1400\", \"4200\", \"viên\"]]}, \"T08-2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"same_columns_as\": \"T02-2025\", \"sample_rows\": [[\"ORD019762\", \"01/08/2025\", \"Đã hoàn thành\", \"Khách lẻ\", \"Gaviscon hộp 24 gói x 10ml\", \"1\", \"192000\", \"192k\", \"hộp\"]]}, \"T09-2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"same_columns_as\": \"T02-2025\", \"sample_rows\": [[\"ORD022683\", \"01/09/2025\", \"Đã hoàn thành\", \"Khách lẻ\", \"Siro ăn ngon Ích Nhi Plus chai 100ml\", \"1\", \"65,000\", \"65000\", \"chai\"]]}, \"T10-2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"same_columns_as\": \"T02-2025\", \"sample_rows\": [[\"ORD025664\", \"01/10/2025\", \"Đã hoàn thành\", \"Đặng Đức Chi\", \"Bio-acimin Gold men vi sinh hộp 30 gói\", \"2\", \"5,300\", \"10600\", \"gói\"]]}, \"T11-2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"same_columns_as\": \"T02-2025\", \"sample_rows\": [[\"ORD028649\", \"01/11/2025\", \"Đã hoàn thành\", \"Lâm Bảo Thắng\", \"Betadine Gargle súc họng chai 125ml\", \"1\", \"75,000\", \"75k\", \"chai\"]]}, \"T12-2025\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"same_columns_as\": \"T02-2025\", \"sample_rows\": [[\"ORD031652\", \"01/12/2025\", \"Đã hoàn thành\", \"Hà Trang Minh\", \"Pharmaton Essential hộp 30 viên\", \"1\", \"210000\", \"210k\", \"hộp\"]]}, \"T01-2026\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"same_columns_as\": \"T02-2025\", \"sample_rows\": [[\"ORD034693\", \"01/01/2026\", \"Đã hoàn thành\", \"Tô Duy Mai\", \"Cao Sao Vàng TW3 hộp 3g\", \"1\", \"5,000\", \"5k\", \"hộp\"]]}, \"T02-2026\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"same_columns_as\": \"T02-2025\", \"sample_rows\": [[\"ORD037777\", \"01/02/2026\", \"Đã hoàn thành\", \"Diệp Minh Linh\", \"Decolgen Forte hộp 30 vỉ x 4 viên\", \"1\", \"1,300\", \"1300\", \"viên\"]]}, \"T03-2026\": {\"approx_rows\": null, \"approx_cols\": null, \"header_row_index\": 2, \"same_columns_as\": \"T02-2025\", \"sample_rows\": [[\"ORD040699\", \"01/03/2026\", \"Đã hoàn thành\", \"Khách lẻ\", \"Fugacar 500mg hộp 1 viên\", \"1\", \"22000\", \"22000\", \"viên\"]]}}, \"hint\": \"Use load_clean_df(file, sheet=..., dedup_order=False) or pd.read_excel(file, sheet_name=...) — headers are auto-detected.\"}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794773482936,
+        "end": 1794773482942
+      },
+      "full_result": {
+        "file": "DonHang_ChiTiet_1.xlsx",
+        "type": "xlsx",
+        "sheets": [
+          "T01-2025",
+          "T02-2025",
+          "T03-2025",
+          "T04-2025",
+          "T05-2025",
+          "T06-2025",
+          "T07-2025",
+          "T08-2025",
+          "T09-2025",
+          "T10-2025",
+          "T11-2025",
+          "T12-2025",
+          "T01-2026",
+          "T02-2026",
+          "T03-2026",
+          "T04-2026",
+          "T05-2026"
+        ],
+        "sheets_preview": {
+          "T01-2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "columns": [
+              "Mã đơn hàng",
+              "Ngày đặt hàng",
+              "Trạng thái đơn hàng",
+              "Tên khách hàng",
+              "Tên sản phẩm",
+              "Số lượng sản phẩm",
+              "Giá sản phẩm",
+              "Tổng tiền",
+              "Đơn vị tính"
+            ],
+            "first_rows": [
+              [
+                "Trạng thái đơn hàng",
+                "Đặt hàng (Đã duyệt)"
+              ],
+              [],
+              [
+                "Mã đơn hàng",
+                "Ngày đặt hàng",
+                "Trạng thái đơn hàng",
+                "Tên khách hàng",
+                "Tên sản phẩm",
+                "Số lượng sản phẩm",
+                "Giá sản phẩm",
+                "Tổng tiền",
+                "Đơn vị tính"
+              ],
+              [
+                "ORD000001",
+                "01/01/2025",
+                "Đã hoàn thành",
+                "Tăng Hiếu Hương",
+                "Lorastad 10mg Stella hộp 10 vỉ x 10 viên",
+                "2",
+                "800",
+                "1.600đ",
+                "viên"
+              ],
+              [
+                "",
+                "",
+                "",
+                "",
+                "Enterogermina 2 tỷ/5ml hộp 20 ống",
+                "1",
+                "9,200",
+                "9200",
+                "ống"
+              ]
+            ],
+            "sample_rows": [
+              [
+                "ORD000001",
+                "01/01/2025",
+                "Đã hoàn thành",
+                "Tăng Hiếu Hương",
+                "Lorastad 10mg Stella hộp 10 vỉ x 10 viên",
+                "2",
+                "800",
+                "1.600đ",
+                "viên"
+              ],
+              [
+                "",
+                "",
+                "",
+                "",
+                "Enterogermina 2 tỷ/5ml hộp 20 ống",
+                "1",
+                "9,200",
+                "9200",
+                "ống"
+              ]
+            ]
+          },
+          "T02-2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "columns": [
+              "Mã đơn hàng",
+              "Ngày đặt hàng",
+              "Trạng thái đơn hàng",
+              "Tên khách hàng",
+              "Tên sản phẩm",
+              "Số lượng sản phẩm",
+              "Giá sản phẩm",
+              "Tổng tiền",
+              "Đơn vị tính"
+            ],
+            "first_rows": [
+              [
+                "Trạng thái đơn hàng",
+                "Đặt hàng (Đã duyệt)"
+              ],
+              [],
+              [
+                "Mã đơn hàng",
+                "Ngày đặt hàng",
+                "Trạng thái đơn hàng",
+                "Tên khách hàng",
+                "Tên sản phẩm",
+                "Số lượng sản phẩm",
+                "Giá sản phẩm",
+                "Tổng tiền",
+                "Đơn vị tính"
+              ],
+              [
+                "ORD002909",
+                "01/02/2025",
+                "Đã hoàn thành",
+                "Hoàng Giang Quân",
+                "Gaviscon hộp 24 gói x 10ml",
+                "2",
+                "8000",
+                "16000",
+                "gói"
+              ],
+              [
+                "ORD002910",
+                "01/02/2025",
+                "Đã hoàn thành",
+                "Đàm Loan Trang",
+                "Zyrtec 10mg hộp 1 vỉ x 10 viên",
+                "2",
+                "75000",
+                "150000",
+                "hộp"
+              ]
+            ],
+            "sample_rows": [
+              [
+                "ORD002909",
+                "01/02/2025",
+                "Đã hoàn thành",
+                "Hoàng Giang Quân",
+                "Gaviscon hộp 24 gói x 10ml",
+                "2",
+                "8000",
+                "16000",
+                "gói"
+              ],
+              [
+                "ORD002910",
+                "01/02/2025",
+                "Đã hoàn thành",
+                "Đàm Loan Trang",
+                "Zyrtec 10mg hộp 1 vỉ x 10 viên",
+                "2",
+                "75000",
+                "150000",
+                "hộp"
+              ]
+            ]
+          },
+          "T03-2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "same_columns_as": "T02-2025",
+            "sample_rows": [
+              [
+                "ORD005502",
+                "01/03/2025",
+                "Đã hoàn thành",
+                "Khách lẻ",
+                "Yumangel hộp 20 gói",
+                "10",
+                "5,300",
+                "53000",
+                "gói"
+              ]
+            ]
+          },
+          "T04-2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "same_columns_as": "T02-2025",
+            "sample_rows": [
+              [
+                "ORD008310",
+                "01/04/2025",
+                "Đã hoàn thành",
+                "Khách lẻ",
+                "Savi Losartan 50mg hộp 3 vỉ x 10 viên",
+                "2",
+                "14,000",
+                "28k",
+                "vỉ"
+              ]
+            ]
+          },
+          "T05-2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "same_columns_as": "T02-2025",
+            "sample_rows": [
+              [
+                "ORD011018",
+                "01/05/2025",
+                "Đã hoàn thành",
+                "Lê Minh Duy",
+                "Que thử thai Quickstick hộp 1 cái",
+                "1",
+                "25,000",
+                "25k",
+                "cái"
+              ]
+            ]
+          },
+          "T06-2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "same_columns_as": "T02-2025",
+            "sample_rows": [
+              [
+                "ORD013979",
+                "01/06/2025",
+                "Đã hoàn thành",
+                "Khách lẻ",
+                "Povidine 10% chai 90ml",
+                "2",
+                "18,000",
+                "36000",
+                "chai"
+              ]
+            ]
+          },
+          "T07-2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "same_columns_as": "T02-2025",
+            "sample_rows": [
+              [
+                "ORD016861",
+                "01/07/2025",
+                "Đã hoàn thành",
+                "Hồ Hồng Hùng",
+                "Panadol Extra hộp 15 vỉ x 12 viên",
+                "3",
+                "1400",
+                "4200",
+                "viên"
+              ]
+            ]
+          },
+          "T08-2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "same_columns_as": "T02-2025",
+            "sample_rows": [
+              [
+                "ORD019762",
+                "01/08/2025",
+                "Đã hoàn thành",
+                "Khách lẻ",
+                "Gaviscon hộp 24 gói x 10ml",
+                "1",
+                "192000",
+                "192k",
+                "hộp"
+              ]
+            ]
+          },
+          "T09-2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "same_columns_as": "T02-2025",
+            "sample_rows": [
+              [
+                "ORD022683",
+                "01/09/2025",
+                "Đã hoàn thành",
+                "Khách lẻ",
+                "Siro ăn ngon Ích Nhi Plus chai 100ml",
+                "1",
+                "65,000",
+                "65000",
+                "chai"
+              ]
+            ]
+          },
+          "T10-2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "same_columns_as": "T02-2025",
+            "sample_rows": [
+              [
+                "ORD025664",
+                "01/10/2025",
+                "Đã hoàn thành",
+                "Đặng Đức Chi",
+                "Bio-acimin Gold men vi sinh hộp 30 gói",
+                "2",
+                "5,300",
+                "10600",
+                "gói"
+              ]
+            ]
+          },
+          "T11-2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "same_columns_as": "T02-2025",
+            "sample_rows": [
+              [
+                "ORD028649",
+                "01/11/2025",
+                "Đã hoàn thành",
+                "Lâm Bảo Thắng",
+                "Betadine Gargle súc họng chai 125ml",
+                "1",
+                "75,000",
+                "75k",
+                "chai"
+              ]
+            ]
+          },
+          "T12-2025": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "same_columns_as": "T02-2025",
+            "sample_rows": [
+              [
+                "ORD031652",
+                "01/12/2025",
+                "Đã hoàn thành",
+                "Hà Trang Minh",
+                "Pharmaton Essential hộp 30 viên",
+                "1",
+                "210000",
+                "210k",
+                "hộp"
+              ]
+            ]
+          },
+          "T01-2026": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "same_columns_as": "T02-2025",
+            "sample_rows": [
+              [
+                "ORD034693",
+                "01/01/2026",
+                "Đã hoàn thành",
+                "Tô Duy Mai",
+                "Cao Sao Vàng TW3 hộp 3g",
+                "1",
+                "5,000",
+                "5k",
+                "hộp"
+              ]
+            ]
+          },
+          "T02-2026": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "same_columns_as": "T02-2025",
+            "sample_rows": [
+              [
+                "ORD037777",
+                "01/02/2026",
+                "Đã hoàn thành",
+                "Diệp Minh Linh",
+                "Decolgen Forte hộp 30 vỉ x 4 viên",
+                "1",
+                "1,300",
+                "1300",
+                "viên"
+              ]
+            ]
+          },
+          "T03-2026": {
+            "approx_rows": null,
+            "approx_cols": null,
+            "header_row_index": 2,
+            "same_columns_as": "T02-2025",
+            "sample_rows": [
+              [
+                "ORD040699",
+                "01/03/2026",
+                "Đã hoàn thành",
+                "Khách lẻ",
+                "Fugacar 500mg hộp 1 viên",
+                "1",
+                "22000",
+                "22000",
+                "viên"
+              ]
+            ]
+          }
+        },
+        "hint": "Use load_clean_df(file, sheet=..., dedup_order=False) or pd.read_excel(file, sheet_name=...) — headers are auto-detected."
+      }
+    },
+    {
+      "tool": "run_python",
+      "callID": "wqSiK06JSYDNz5vxh7KjowrHkmMSZIZy",
+      "messageID": "msg_1e0d5fdcc001X1u35BS9muVv8Q",
+      "status": "completed",
+      "input": {
+        "code": "import pandas as pd\n\n# Explore status labels in T03-2026\ndf = pd.read_excel(\"DonHang_ChiTiet_1.xlsx\", sheet_name=\"T03-2026\", usecols=\"A,C\")\ndf.columns = [\"ma_don\", \"trang_thai\"]\ndf = df.dropna(subset=[\"ma_don\"])\nprint(\"Status values counts:\")\nprint(df[\"trang_thai\"].value_counts())\nprint()\nprint(\"Total rows:\", len(df))\n"
+      },
+      "output": "{\"success\": true, \"kind\": \"observation\", \"parsed_output\": {\"kind\": \"observation\", \"data\": \"Status values counts:\\ntrang_thai\\nĐã hoàn thành          3088\\nĐã hủy                   31\\nĐã hoàn hàng             29\\nTrạng thái đơn hàng       1\\nName: count, dtype: int64\\n\\nTotal rows: 6019\", \"message\": \"Captured output\"}, \"stdout\": \"Status values counts:\\ntrang_thai\\nĐã hoàn thành          3088\\nĐã hủy                   31\\nĐã hoàn hàng             29\\nTrạng thái đơn hàng       1\\nName: count, dtype: int64\\n\\nTotal rows: 6019\\n{\\\"kind\\\": \\\"observation\\\", \\\"data\\\": \\\"Status values counts:\\\\ntrang_thai\\\\nĐã hoàn thành          3088\\\\nĐã hủy                   31\\\\nĐã hoàn hàng             29\\\\nTrạng thái đơn hàng       1\\\\nName: count, dtype: int64\\\\n\\\\nTotal rows: 6019\\\", \\\"message\\\": \\\"Captured output\\\"}\", \"stderr\": \"\", \"returncode\": 0, \"timeout\": false}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794773521288,
+        "end": 1794773521293
+      },
+      "full_result": {
+        "success": true,
+        "kind": "observation",
+        "parsed_output": {
+          "kind": "observation",
+          "data": "Status values counts:\ntrang_thai\nĐã hoàn thành          3088\nĐã hủy                   31\nĐã hoàn hàng             29\nTrạng thái đơn hàng       1\nName: count, dtype: int64\n\nTotal rows: 6019",
+          "message": "Captured output"
+        },
+        "stdout": "Status values counts:\ntrang_thai\nĐã hoàn thành          3088\nĐã hủy                   31\nĐã hoàn hàng             29\nTrạng thái đơn hàng       1\nName: count, dtype: int64\n\nTotal rows: 6019\n{\"kind\": \"observation\", \"data\": \"Status values counts:\\ntrang_thai\\nĐã hoàn thành          3088\\nĐã hủy                   31\\nĐã hoàn hàng             29\\nTrạng thái đơn hàng       1\\nName: count, dtype: int64\\n\\nTotal rows: 6019\", \"message\": \"Captured output\"}",
+        "stderr": "",
+        "returncode": 0,
+        "timeout": false
+      }
+    },
+    {
+      "tool": "run_python",
+      "callID": "jUfOOhAf2MDGJA1UYnNxlvg4ph2M9Nrk",
+      "messageID": "msg_1e0d6939f001KlX9rSYQz0O33V",
+      "status": "completed",
+      "input": {
+        "code": "import pandas as pd\n\ndf = pd.read_excel(\"DonHang_ChiTiet_1.xlsx\", sheet_name=\"T03-2026\", usecols=\"A,C\")\ndf[\"ma_don\"] = df[\"ma_don\"].astype(str).str.strip()\ndf = df[df[\"ma_don\"] != \"\"]   # drop header artifacts\n\n# distinct orders by status\noverall = df[\"ma_don\"].nunique()\ntruhang = df[df[\"trang_thai\"].str.contains(\"Trả hàng\", case=False, na=False)][\"ma_don\"].nunique()\nhuy = df[df[\"trang_thai\"].str.contains(\"Đã hủy\", case=False, na=False)][\"ma_don\"].nunique()\n\nprint(\"Total distinct orders:\", overall)\nprint(\"Canceled (Huỷ) orders:\", huy)\nprint(\"Return orders:\", truhang)\n\nratio = huy / overall * 100\nprint(\"Cancel ratio %.4f\" % ratio)\nprint(\"Rounded 2 decimals: %.2f\" % ratio)\n"
+      },
+      "output": "{\"success\": false, \"kind\": \"error\", \"error_kind\": \"runtime_error\", \"error\": \"Traceback (most recent call last):\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/indexes/base.py\\\", line 3812, in get_loc\\n    return self._engine.get_loc(casted_key)\\n           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\\n  File \\\"pandas/_libs/index.pyx\\\", line 167, in pandas._libs.index.IndexEngine.get_loc\\n  File \\\"pandas/_libs/index.pyx\\\", line 196, in pandas._libs.index.IndexEngine.get_loc\\n  File \\\"pandas/_libs/hashtable_class_helper.pxi\\\", line 7088, in pandas._libs.hashtable.PyObjectHashTable.get_item\\n  File \\\"pandas/_libs/hashtable_class_helper.pxi\\\", line 7096, in pandas._libs.hashtable.PyObjectHashTable.get_item\\nKeyError: 'ma_don'\\n\\nThe above exception was the direct cause of the following exception:\\n\\nTraceback (most recent call last):\\n  File \\\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_67297f4bdfc2/tmp_y14bvar.py\\\", line 1011, in <module>\\n    df[\\\"ma_don\\\"] = df[\\\"ma_don\\\"].astype(str).str.strip()\\n                   ~~^^^^^^^^^^\\n  File \\\"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_67297f4bdfc2/tmp_y14bvar.py\\\", line 677, in _bridge_df_getitem\\n    return _bridge_orig_df_getitem(self, key)\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\\\", line 4113, in __getitem__\\n    indexer = self.columns.get_loc(key)\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/indexes/base.py\\\", line 3819, in get_loc\\n    raise KeyError(key) from err\\nKeyError: 'ma_don'\", \"stdout\": \"\", \"stderr\": \"Traceback (most recent call last):\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/indexes/base.py\\\", line 3812, in get_loc\\n    return self._engine.get_loc(casted_key)\\n           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\\n  File \\\"pandas/_libs/index.pyx\\\", line 167, in pandas._libs.index.IndexEngine.get_loc\\n  File \\\"pandas/_libs/index.pyx\\\", line 196, in pandas._libs.index.IndexEngine.get_loc\\n  File \\n... [truncated 781 chars; filter/aggregate before printing] ...\\nidge_orig_df_getitem(self, key)\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\\\", line 4113, in __getitem__\\n    indexer = self.columns.get_loc(key)\\n  File \\\"/usr/local/lib/python3.13/dist-packages/pandas/core/indexes/base.py\\\", line 3819, in get_loc\\n    raise KeyError(key) from err\\nKeyError: 'ma_don'\", \"returncode\": 1, \"timeout\": false}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794773545070,
+        "end": 1794773545074
+      },
+      "full_result": {
+        "success": false,
+        "kind": "error",
+        "error_kind": "runtime_error",
+        "error": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/indexes/base.py\", line 3812, in get_loc\n    return self._engine.get_loc(casted_key)\n           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\n  File \"pandas/_libs/index.pyx\", line 167, in pandas._libs.index.IndexEngine.get_loc\n  File \"pandas/_libs/index.pyx\", line 196, in pandas._libs.index.IndexEngine.get_loc\n  File \"pandas/_libs/hashtable_class_helper.pxi\", line 7088, in pandas._libs.hashtable.PyObjectHashTable.get_item\n  File \"pandas/_libs/hashtable_class_helper.pxi\", line 7096, in pandas._libs.hashtable.PyObjectHashTable.get_item\nKeyError: 'ma_don'\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_67297f4bdfc2/tmp_y14bvar.py\", line 1011, in <module>\n    df[\"ma_don\"] = df[\"ma_don\"].astype(str).str.strip()\n                   ~~^^^^^^^^^^\n  File \"/kaggle/working/ornith_opencode_train_eval_agent_20261115_183732/eval_agent_50_t00/_python_workdir/q_67297f4bdfc2/tmp_y14bvar.py\", line 677, in _bridge_df_getitem\n    return _bridge_orig_df_getitem(self, key)\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\", line 4113, in __getitem__\n    indexer = self.columns.get_loc(key)\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/indexes/base.py\", line 3819, in get_loc\n    raise KeyError(key) from err\nKeyError: 'ma_don'",
+        "stdout": "",
+        "stderr": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/indexes/base.py\", line 3812, in get_loc\n    return self._engine.get_loc(casted_key)\n           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^\n  File \"pandas/_libs/index.pyx\", line 167, in pandas._libs.index.IndexEngine.get_loc\n  File \"pandas/_libs/index.pyx\", line 196, in pandas._libs.index.IndexEngine.get_loc\n  File \n... [truncated 781 chars; filter/aggregate before printing] ...\nidge_orig_df_getitem(self, key)\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/frame.py\", line 4113, in __getitem__\n    indexer = self.columns.get_loc(key)\n  File \"/usr/local/lib/python3.13/dist-packages/pandas/core/indexes/base.py\", line 3819, in get_loc\n    raise KeyError(key) from err\nKeyError: 'ma_don'",
+        "returncode": 1,
+        "timeout": false
+      }
+    },
+    {
+      "tool": "run_python",
+      "callID": "wrT6ooyLGomrf2gsa63nbWRNn20HM5I8",
+      "messageID": "msg_1e0d6f07f0018ygkbrjh0Q3Cs6",
+      "status": "completed",
+      "input": {
+        "code": "import pandas as pd\nraw = pd.read_excel(\"DonHang_ChiTiet_1.xlsx\", sheet_name=\"T03-2026\")\nprint(\"columns:\", list(raw.columns))\nprint(\"head:\")\nprint(raw.head(5))\n"
+      },
+      "output": "{\"success\": true, \"kind\": \"observation\", \"parsed_output\": {\"kind\": \"observation\", \"data\": \"columns: ['Mã đơn hàng', 'Ngày đặt hàng', 'Trạng thái đơn hàng', 'Tên khách hàng', 'Tên sản phẩm', 'Số lượng sản phẩm', 'Giá sản phẩm', 'Tổng tiền', 'Đơn vị tính']\\nhead:\\n  Mã đơn hàng Ngày đặt hàng  ... Tổng tiền Đơn vị tính\\n0   ORD040699    01/03/2026  ...     22000        viên\\n1   ORD040700    01/03/2026  ...   14.100đ         gói\\n2   ORD040701    01/03/2026  ...   12.600đ         gói\\n3   ORD040702    01/03/2026  ...        5k          vỉ\\n4   ORD040703    01/03/2026  ...      1300        viên\\n\\n[5 rows x 9 columns]\", \"message\": \"Captured output\"}, \"stdout\": \"columns: ['Mã đơn hàng', 'Ngày đặt hàng', 'Trạng thái đơn hàng', 'Tên khách hàng', 'Tên sản phẩm', 'Số lượng sản phẩm', 'Giá sản phẩm', 'Tổng tiền', 'Đơn vị tính']\\nhead:\\n  Mã đơn hàng Ngày đặt hàng  ... Tổng tiền Đơn vị tính\\n0   ORD040699    01/03/2026  ...     22000        viên\\n1   ORD040700    01/03/2026  ...   14.100đ         gói\\n2   ORD040701    01/03/2026  ...   12.600đ         gói\\n3   ORD040702    01/03/2026  ...        5k          vỉ\\n4   ORD040703    01/03/2026  ...      1300        viên\\n\\n[5 rows x 9 columns]\\n{\\\"kind\\\": \\\"observation\\\", \\\"data\\\": \\\"columns: ['Mã đơn hàng', 'Ngày đặt hàng', 'Trạng thái đơn hàng', 'Tên khách hàng', 'Tên sản phẩm', 'Số lượng sản phẩm', 'Giá sản phẩm', 'Tổng tiền', 'Đơn vị tính']\\\\nhead:\\\\n  Mã đơn hàng Ngày đặt hàng  ... Tổng tiền Đơn vị tính\\\\n0   ORD040699    01/03/2026  ...     22000        viên\\\\n1   ORD040700    01/03/2026  ...   14.100đ         gói\\\\n2   ORD040701    01/03/2026  ...   12.600đ         gói\\\\n3   ORD040702    01/03/2026  ...        5k          vỉ\\\\n4   ORD040703    01/03/2026  ...      1300        viên\\\\n\\\\n[5 rows x 9 columns]\\\", \\\"message\\\": \\\"Captured output\\\"}\", \"stderr\": \"\", \"returncode\": 0, \"timeout\": false}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794773562200,
+        "end": 1794773562204
+      },
+      "full_result": {
+        "success": true,
+        "kind": "observation",
+        "parsed_output": {
+          "kind": "observation",
+          "data": "columns: ['Mã đơn hàng', 'Ngày đặt hàng', 'Trạng thái đơn hàng', 'Tên khách hàng', 'Tên sản phẩm', 'Số lượng sản phẩm', 'Giá sản phẩm', 'Tổng tiền', 'Đơn vị tính']\nhead:\n  Mã đơn hàng Ngày đặt hàng  ... Tổng tiền Đơn vị tính\n0   ORD040699    01/03/2026  ...     22000        viên\n1   ORD040700    01/03/2026  ...   14.100đ         gói\n2   ORD040701    01/03/2026  ...   12.600đ         gói\n3   ORD040702    01/03/2026  ...        5k          vỉ\n4   ORD040703    01/03/2026  ...      1300        viên\n\n[5 rows x 9 columns]",
+          "message": "Captured output"
+        },
+        "stdout": "columns: ['Mã đơn hàng', 'Ngày đặt hàng', 'Trạng thái đơn hàng', 'Tên khách hàng', 'Tên sản phẩm', 'Số lượng sản phẩm', 'Giá sản phẩm', 'Tổng tiền', 'Đơn vị tính']\nhead:\n  Mã đơn hàng Ngày đặt hàng  ... Tổng tiền Đơn vị tính\n0   ORD040699    01/03/2026  ...     22000        viên\n1   ORD040700    01/03/2026  ...   14.100đ         gói\n2   ORD040701    01/03/2026  ...   12.600đ         gói\n3   ORD040702    01/03/2026  ...        5k          vỉ\n4   ORD040703    01/03/2026  ...      1300        viên\n\n[5 rows x 9 columns]\n{\"kind\": \"observation\", \"data\": \"columns: ['Mã đơn hàng', 'Ngày đặt hàng', 'Trạng thái đơn hàng', 'Tên khách hàng', 'Tên sản phẩm', 'Số lượng sản phẩm', 'Giá sản phẩm', 'Tổng tiền', 'Đơn vị tính']\\nhead:\\n  Mã đơn hàng Ngày đặt hàng  ... Tổng tiền Đơn vị tính\\n0   ORD040699    01/03/2026  ...     22000        viên\\n1   ORD040700    01/03/2026  ...   14.100đ         gói\\n2   ORD040701    01/03/2026  ...   12.600đ         gói\\n3   ORD040702    01/03/2026  ...        5k          vỉ\\n4   ORD040703    01/03/2026  ...      1300        viên\\n\\n[5 rows x 9 columns]\", \"message\": \"Captured output\"}",
+        "stderr": "",
+        "returncode": 0,
+        "timeout": false
+      }
+    },
+    {
+      "tool": "run_python",
+      "callID": "vdijvedtAzPwgZ1Nm5ExyRr3l6uoaPCa",
+      "messageID": "msg_1e0d7336a001ZLLKqJvYMNlyy1",
+      "status": "completed",
+      "input": {
+        "code": "import pandas as pd\n\ndf = pd.read_excel(\"DonHang_ChiTiet_1.xlsx\", sheet_name=\"T03-2026\")\ndf[\"Mã đơn hàng\"] = df[\"Mã đơn hàng\"].astype(str).str.strip()\ndf = df[df[\"Mã đơn hàng\"] != \"\"]\n\noverall = df[\"Mã đơn hàng\"].nunique()\nmask_huy = df[\"Trạng thái đơn hàng\"].str.contains(\"Đã hủy|Huỷ\", case=False, na=False)\nhuy = df[mask_huy][\"Mã đơn hàng\"].nunique()\n\nratio = huy / overall * 100\nprint(\"Total distinct orders   :\", overall)\nprint(\"Canceled (Huỷ) orders   :\", huy)\nprint(\"Cancel ratio: %.4f percent\" % ratio)\nprint(\"Rounded 2 decimals: %.2f\" % ratio)\n"
+      },
+      "output": "{\"success\": true, \"kind\": \"observation\", \"parsed_output\": {\"kind\": \"observation\", \"data\": \"Total distinct orders   : 3148\\nCanceled (Huỷ) orders   : 31\\nCancel ratio: 0.9848 percent\\nRounded 2 decimals: 0.98\", \"message\": \"Captured output\"}, \"stdout\": \"Total distinct orders   : 3148\\nCanceled (Huỷ) orders   : 31\\nCancel ratio: 0.9848 percent\\nRounded 2 decimals: 0.98\\n{\\\"kind\\\": \\\"observation\\\", \\\"data\\\": \\\"Total distinct orders   : 3148\\\\nCanceled (Huỷ) orders   : 31\\\\nCancel ratio: 0.9848 percent\\\\nRounded 2 decimals: 0.98\\\", \\\"message\\\": \\\"Captured output\\\"}\", \"stderr\": \"\", \"returncode\": 0, \"timeout\": false}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794773585732,
+        "end": 1794773585737
+      },
+      "full_result": {
+        "success": true,
+        "kind": "observation",
+        "parsed_output": {
+          "kind": "observation",
+          "data": "Total distinct orders   : 3148\nCanceled (Huỷ) orders   : 31\nCancel ratio: 0.9848 percent\nRounded 2 decimals: 0.98",
+          "message": "Captured output"
+        },
+        "stdout": "Total distinct orders   : 3148\nCanceled (Huỷ) orders   : 31\nCancel ratio: 0.9848 percent\nRounded 2 decimals: 0.98\n{\"kind\": \"observation\", \"data\": \"Total distinct orders   : 3148\\nCanceled (Huỷ) orders   : 31\\nCancel ratio: 0.9848 percent\\nRounded 2 decimals: 0.98\", \"message\": \"Captured output\"}",
+        "stderr": "",
+        "returncode": 0,
+        "timeout": false
+      }
+    },
+    {
+      "tool": "run_python",
+      "callID": "nFcCLj2L4gImxOUqpnClLtw57bV1MblB",
+      "messageID": "msg_1e0d78f5a001jhJ2N7eBaDbeBa",
+      "status": "completed",
+      "input": {
+        "code": "ratio = 31/3148*100\nanswer = round(ratio, 2)\nemit_final(answer, type=\"percent\", evidence=\"31/3148 orders in T03-2026\")\n"
+      },
+      "output": "{\"success\": true, \"kind\": \"final\", \"parsed_output\": {\"kind\": \"final\", \"type\": \"percent\", \"answer\": 0.98, \"evidence\": \"31/3148 orders in T03-2026\"}, \"stdout\": \"{\\\"kind\\\": \\\"final\\\", \\\"type\\\": \\\"percent\\\", \\\"answer\\\": 0.98, \\\"evidence\\\": \\\"31/3148 orders in T03-2026\\\"}\\n{\\\"kind\\\": \\\"final\\\", \\\"type\\\": \\\"percent\\\", \\\"answer\\\": 0.98, \\\"evidence\\\": \\\"31/3148 orders in T03-2026\\\"}\", \"stderr\": \"\", \"returncode\": 0, \"timeout\": false}",
+      "error": null,
+      "metadata": {
+        "truncated": false
+      },
+      "time": {
+        "start": 1794773601609,
+        "end": 1794773601613
+      },
+      "full_result": {
+        "success": true,
+        "kind": "final",
+        "parsed_output": {
+          "kind": "final",
+          "type": "percent",
+          "answer": 0.98,
+          "evidence": "31/3148 orders in T03-2026"
+        },
+        "stdout": "{\"kind\": \"final\", \"type\": \"percent\", \"answer\": 0.98, \"evidence\": \"31/3148 orders in T03-2026\"}\n{\"kind\": \"final\", \"type\": \"percent\", \"answer\": 0.98, \"evidence\": \"31/3148 orders in T03-2026\"}",
+        "stderr": "",
+        "returncode": 0,
+        "timeout": false
+      }
+    }
+  ],
+  "api_errors": [],
+  "jsonl_parse_errors": [],
+  "raw_final_text": "0.98",
+  "prediction": {
+    "id": "q_67297f4bdfc2",
+    "type": "percent",
+    "answer": 0.98
+  },
+  "type_source": "tool:run_python",
+  "abstain_reason": null,
+  "tool_succeeded_but_final_empty": false,
+  "tool_rescue_prediction": {
+    "id": "q_67297f4bdfc2",
+    "type": "percent",
+    "answer": 0.98
+  },
+  "stderr": ""
+}
